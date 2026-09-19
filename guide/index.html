@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>やるべきこと-editor の使い方</title>
+<link rel="icon" type="image/svg+xml" href="../icons/app-a.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../icons/app-32.png">
+<link rel="icon" type="image/png" sizes="256x256" href="../icons/app-256.png">
+<style>
+/* このページは単体で開けるようにしてある（アプリを起動していなくても読める）。
+   外部から読み込むものは無い。画像は同じフォルダの img/ にある。 */
+:root{
+  --bg:#0f1219; --bg2:#171c25; --bg3:#1e2530;
+  --fg:#d7dde8; --fg-dim:#97a1b4; --border:#2a3040; --border2:#39404f;
+  --accent:#6aa6ff; --mark:#ffb020;
+  --font-ui:'Segoe UI','Yu Gothic UI','Meiryo',sans-serif;
+  --font-code:'JetBrains Mono','Cascadia Code','Consolas',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-ui);
+     font-size:15px;line-height:1.95;display:flex;justify-content:center;
+     padding:0 20px 120px}
+.wrap{width:100%;max-width:1000px}
+
+header{padding:56px 0 30px;border-bottom:1px solid var(--border);margin-bottom:8px}
+h1{font-size:25px;font-weight:600;letter-spacing:-.01em;margin-bottom:8px}
+.lead{color:var(--fg-dim);font-size:14px}
+.lead strong{color:var(--fg)}
+
+nav.toc{position:sticky;top:0;z-index:10;background:rgba(15,18,25,.94);
+        backdrop-filter:blur(8px);padding:12px 0;margin-bottom:20px;
+        border-bottom:1px solid var(--border)}
+nav.toc ul{list-style:none;display:flex;flex-wrap:wrap;gap:6px}
+nav.toc a{display:inline-block;padding:5px 11px;border-radius:999px;
+          border:1px solid var(--border2);color:var(--fg-dim);
+          text-decoration:none;font-size:12.5px}
+nav.toc a:hover{border-color:var(--accent);color:var(--accent)}
+
+section{padding:40px 0 10px;border-bottom:1px solid var(--border)}
+section:last-of-type{border-bottom:0}
+h2{font-size:19px;font-weight:600;margin-bottom:6px;scroll-margin-top:70px}
+h2 .num{display:inline-flex;align-items:center;justify-content:center;
+        width:26px;height:26px;border-radius:999px;background:var(--accent);
+        color:#0b0e14;font-size:13px;font-weight:700;margin-right:10px;
+        vertical-align:2px}
+h3{font-size:15px;font-weight:600;margin:26px 0 8px;color:var(--accent)}
+p{margin:10px 0}
+p.sub{color:var(--fg-dim);font-size:13.5px;margin-top:0;margin-bottom:18px}
+strong{color:#eaf0fa}
+em{font-style:normal;color:var(--fg-dim)}
+
+figure{margin:18px 0 22px}
+figure img{width:100%;display:block;border:1px solid var(--border2);
+           border-radius:10px;background:var(--bg2)}
+figure img.shrink{max-width:560px}
+figure img.narrow{max-width:420px}
+figcaption{color:var(--fg-dim);font-size:12.5px;margin-top:9px;line-height:1.75}
+
+ol.marks{list-style:none;margin:12px 0 6px}
+ol.marks li{position:relative;padding-left:34px;margin-bottom:7px;font-size:14px}
+ol.marks li .m{position:absolute;left:0;top:2px;width:22px;height:22px;
+               border-radius:999px;background:var(--mark);color:#1a1206;
+               font-size:12px;font-weight:700;text-align:center;line-height:22px}
+
+ul.plain{list-style:none;margin:10px 0}
+ul.plain li{position:relative;padding-left:18px;margin-bottom:6px}
+ul.plain li::before{content:'—';position:absolute;left:0;color:var(--fg-dim)}
+
+.note{border:1px dashed var(--border2);border-left:3px solid var(--accent);
+      border-radius:9px;padding:13px 16px;margin:18px 0;
+      background:rgba(23,28,37,.6);font-size:13.5px;color:var(--fg-dim)}
+.note strong{display:block;margin-bottom:3px;color:var(--fg)}
+.warn{border-left-color:var(--mark)}
+
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px}
+th,td{border:1px solid var(--border);padding:9px 12px;text-align:left;vertical-align:top}
+th{background:var(--bg2);font-weight:600;color:#eaf0fa}
+
+kbd{display:inline-block;padding:2px 7px;margin:0 1px;border:1px solid var(--border2);
+    border-bottom-width:2px;border-radius:5px;background:var(--bg3);
+    font-family:var(--font-code);font-size:11.5px}
+code{font-family:var(--font-code);font-size:.92em;background:var(--bg2);
+     border:1px solid var(--border);border-radius:4px;padding:1px 5px}
+
+footer{padding:50px 0 0;color:var(--fg-dim);font-size:12.5px}
+
+@media (max-width:760px){
+  body{font-size:14.5px}
+  h1{font-size:21px}
+  figure img.shrink,figure img.narrow{max-width:100%}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>やるべきこと-editor の使い方</h1>
+  <p class="lead">
+    画面写真つきの手引きです。<strong>最初は「1 画面の見かた」と「2 書く」だけ</strong>読めば使えます。<br>
+    残りは、必要になったときに戻ってきてください。
+  </p>
+</header>
+
+<nav class="toc">
+  <ul>
+    <li><a href="#s1">1 画面の見かた</a></li>
+    <li><a href="#s2">2 書く</a></li>
+    <li><a href="#s3">3 畳む</a></li>
+    <li><a href="#s4">4 表・コード・画像</a></li>
+    <li><a href="#s5">5 付箋</a></li>
+    <li><a href="#s6">6 整理モード</a></li>
+    <li><a href="#s7">7 本日更新</a></li>
+    <li><a href="#s8">8 履歴・週のまとめ</a></li>
+    <li><a href="#s9">9 作業ファイル</a></li>
+    <li><a href="#s10">10 人に渡す</a></li>
+    <li><a href="#s11">11 見た目の設定</a></li>
+    <li><a href="#s12">12 キー操作</a></li>
+  </ul>
+</nav>
+
+<!-- ───────────────────────────── 1 -->
+<section id="s1">
+  <h2><span class="num">1</span>画面の見かた</h2>
+  <p class="sub">まずはどこに何があるかだけ掴んでください。</p>
+
+  <figure>
+    <img src="img/01-overview.png" alt="全体の画面。ツールバー・ナビゲーション・本文・付箋・本日更新に番号が振ってある">
+  </figure>
+
+  <ol class="marks">
+    <li><span class="m">1</span><strong>ツールバー</strong> — 書くための道具が並んでいます。左から「足すもの」、右へ行くほど「全体に関わるもの」です。</li>
+    <li><span class="m">2</span><strong>ナビゲーション</strong> — 書いた見出しが自動で並びます。押すとその場所へ飛びます。</li>
+    <li><span class="m">3</span><strong>本文</strong> — クリックすればそのまま書けます。<strong>保存ボタンはありません</strong>（自動で保存されます）。</li>
+    <li><span class="m">4</span><strong>付箋</strong> — 画面の右端に貼りつくメモ。押すとその場所へ飛びます。</li>
+    <li><span class="m">5</span><strong>本日更新</strong> — その日に書き足した所だけが、自動でここに集まります。</li>
+  </ol>
+
+  <div class="note">
+    <strong>この道具のいちばんの特徴は 5 です</strong>
+    ふつうのメモ帳は「いま何が書いてあるか」しか見せません。この道具は
+    「<em>今日どこを触ったか</em>」を勝手に覚えていて、あとから日付で引けます。
+  </div>
+</section>
+
+<!-- ───────────────────────────── 2 -->
+<section id="s2">
+  <h2><span class="num">2</span>書く — 見出し・段落・セクション</h2>
+  <p class="sub">ツールバーの左側が「足すもの」です。</p>
+
+  <figure>
+    <img src="img/03-toolbar-blocks.png" alt="ツールバーの、ブロックを足すボタンの並び" class="shrink">
+  </figure>
+
+  <ol class="marks">
+    <li><span class="m">1</span><strong>セクション</strong> — 大きな入れ物。畳めます。ひとつの話題をまるごと入れます。</li>
+    <li><span class="m">2</span><strong>見出し</strong> — ただの見出し。畳めません。ナビゲーションに出ます。</li>
+    <li><span class="m">3</span><strong>段落</strong> — ふつうの文章。</li>
+    <li><span class="m">4</span><strong>引きだし</strong> — 小さな入れ物。セクションの中で、さらに畳みたいときに。</li>
+    <li><span class="m">5</span><strong>画像</strong>／<span class="m">6</span><strong>表</strong> — そのまま貼れます。</li>
+  </ol>
+
+  <h3>セクションと見出しの違い</h3>
+  <table>
+    <tr><th></th><th>セクション</th><th>見出し</th></tr>
+    <tr><th>畳めるか</th><td>畳める（中身ごと隠れる）</td><td>畳めない</td></tr>
+    <tr><th>中に入るか</th><td>入る（他のブロックを抱える）</td><td>入らない（ただの行）</td></tr>
+    <tr><th>向いている使い方</th><td>案件・プロジェクトの単位</td><td>長い文章の区切り</td></tr>
+  </table>
+
+  <p>迷ったら<strong>セクション</strong>にしてください。あとで畳めるほうが、増えたときに困りません。</p>
+
+  <h3>字下げ</h3>
+  <p><kbd>Tab</kbd> で一段下げ、<kbd>Shift</kbd>+<kbd>Tab</kbd> で戻せます。
+     行の先頭で <kbd>Backspace</kbd> を押しても一段戻ります。</p>
+</section>
+
+<!-- ───────────────────────────── 3 -->
+<section id="s3">
+  <h2><span class="num">3</span>畳む — セクションと引きだし</h2>
+  <p class="sub">増えてきたら、読まないものを隠します。消さずに隠すのが要点です。</p>
+
+  <figure>
+    <img src="img/04-section.png" alt="開いているセクション">
+    <figcaption>開いているセクション。見出しの左の ▼ を押すと畳めます。右の「(4 件)」は中身の数です。</figcaption>
+  </figure>
+
+  <figure>
+    <img src="img/05-section-collapsed.png" alt="畳んだセクション" class="shrink">
+    <figcaption>畳むとこうなります。中身は消えていません。もう一度押すと戻ります。</figcaption>
+  </figure>
+
+  <h3>引きだし</h3>
+  <p>セクションの中で、さらに小さく畳みたいときに使います。
+     「調べたときのメモ」「印刷所に聞いたこと」のような、
+     <strong>いま要らないが捨てたくないもの</strong>の置き場です。</p>
+
+  <figure>
+    <img src="img/06-drawer-open.png" alt="開いている引きだし" class="shrink">
+    <figcaption>開いた引きだし。</figcaption>
+  </figure>
+  <figure>
+    <img src="img/06-drawer-closed.png" alt="閉じた引きだし" class="narrow">
+    <figcaption>閉じるとこの1行だけになります。</figcaption>
+  </figure>
+
+  <div class="note">
+    <strong>消さずに畳む</strong>
+    消してしまうと履歴からも消え、「あのとき何をやめたのか」が分からなくなります。
+    畳んでおけば、場所は取らないのに、いつでも読み返せます。
+  </div>
+</section>
+
+<!-- ───────────────────────────── 4 -->
+<section id="s4">
+  <h2><span class="num">4</span>表・コード・画像</h2>
+
+  <figure>
+    <img src="img/07-table.png" alt="表ブロック">
+    <figcaption>表。下の「+行 / +列 / -行 / -列」で大きさを変えます。セルはそのまま書けます。</figcaption>
+  </figure>
+
+  <figure>
+    <img src="img/08-code.png" alt="コードブロック">
+    <figcaption>コード。言語を選ぶと色が付きます。貼り付けたコマンドを崩さずに残せます。</figcaption>
+  </figure>
+
+  <figure>
+    <img src="img/09-image.png" alt="画像ブロック">
+    <figcaption>画像。貼った当日は文書の中に直接入り、翌日以降は外のファイルに移されます
+      （文書が重くならないようにするためです。見た目は変わりません）。</figcaption>
+  </figure>
+</section>
+
+<!-- ───────────────────────────── 5 -->
+<section id="s5">
+  <h2><span class="num">5</span>付箋 — 戻ってくる場所に貼る</h2>
+
+  <figure>
+    <img src="img/10-sticky.png" alt="画面右の付箋と、その上の追加ボタン" class="shrink">
+  </figure>
+  <ol class="marks">
+    <li><span class="m">1</span>付箋を足すボタン。<strong>付箋が並ぶ場所のすぐ上</strong>にあります。</li>
+    <li><span class="m">2</span>貼った付箋。押すと、その付箋を貼った場所まで画面が飛びます。</li>
+  </ol>
+
+  <figure>
+    <img src="img/11-sticky-add.png" alt="付箋を追加する画面" class="narrow">
+    <figcaption>色を選んで、40文字までの短い言葉を入れます。</figcaption>
+  </figure>
+
+  <div class="note">
+    <strong>やることリストにしないほうが長持ちします</strong>
+    付箋は増えるほど効かなくなります。<strong>「今週ここに戻ってくる」という数枚</strong>に絞ると、
+    目印として機能し続けます。やること自体は本文に書いてください。
+  </div>
+
+  <p class="sub">画面の幅が狭いときは、付箋は右端に隠れます。マウスを近づけると出てきます。</p>
+</section>
+
+<!-- ───────────────────────────── 6 -->
+<section id="s6">
+  <h2><span class="num">6</span>整理モード — 動かすだけの日に使う</h2>
+
+  <figure>
+    <img src="img/12-reorg.png" alt="整理モードのボタンと、画面上部に出る帯">
+  </figure>
+  <ol class="marks">
+    <li><span class="m">1</span>ツールバーの「整理」を押すと入ります。もう一度押すと出ます。</li>
+    <li><span class="m">2</span>入っている間は、画面の上にこの帯が出ます。</li>
+  </ol>
+
+  <p><strong>この間の移動・削除は「本日更新」に出ません。</strong></p>
+
+  <div class="note warn">
+    <strong>なぜこれが要るのか</strong>
+    整理モードを使わずに大掃除をすると、その日の「本日更新」が
+    <em>動かしただけの行</em>で埋まります。すると、
+    <strong>その日に本当に書いたことが埋もれて見えなくなります。</strong><br><br>
+    週に一度の片付けは、必ず整理モードに入ってから。これだけで記録が汚れません。
+  </div>
+</section>
+
+<!-- ───────────────────────────── 7 -->
+<section id="s7">
+  <h2><span class="num">7</span>本日更新 — 今日どこを触ったか</h2>
+
+  <figure>
+    <img src="img/13-today.png" alt="本日更新の一覧">
+    <figcaption>その日に書き足した所が、セクションごとにまとまって出ます。何も書かなければ何も出ません。</figcaption>
+  </figure>
+
+  <p>手で書くものではありません。<strong>書いていれば勝手に溜まります。</strong>
+     画面の下と、左のナビゲーションの両方に出ます。</p>
+
+  <p class="sub">やり直したいときは「履歴」の中にある「本日更新をリセット」で、
+     いまの状態を新しい基準にできます。</p>
+</section>
+
+<!-- ───────────────────────────── 8 -->
+<section id="s8">
+  <h2><span class="num">8</span>履歴と、週のまとめを出す</h2>
+
+  <figure>
+    <img src="img/14-history.png" alt="履歴の画面">
+    <figcaption>「履歴」を押すと、過去の日付の「その日に書いたこと」が読めます。</figcaption>
+  </figure>
+
+  <h3>週のまとめを1ファイルで出す</h3>
+  <p>ファイルメニューの「履歴を HTML で書き出す…」を使います。</p>
+
+  <figure>
+    <img src="img/16-history-html.png" alt="履歴をHTMLで書き出す画面。期間のワンタッチ選択がある" class="shrink">
+  </figure>
+  <ol class="marks">
+    <li><span class="m">1</span><strong>期間はワンタッチ</strong>で選べます。「今週」「先週」「直近7日」「直近30日」「全期間」。</li>
+    <li><span class="m">2</span>押すと、記録のある日で何日ぶんになるかがその場に出ます。</li>
+  </ol>
+
+  <p>出てくるのは <strong>HTML が1ファイルだけ</strong>です。相手はそれを開くだけで読めます。
+     画像も中に入っているので、インターネットに接続していなくても開けます。</p>
+
+  <div class="note">
+    <strong>週報として使う</strong>
+    金曜に「先週」または「今週」を選んで書き出せば、その週にやったことの一覧がそのまま出ます。
+    書き足す必要はありません。
+  </div>
+</section>
+
+<!-- ───────────────────────────── 9 -->
+<section id="s9">
+  <h2><span class="num">9</span>作業ファイル — 頭を切り替える単位で分ける</h2>
+
+  <figure>
+    <img src="img/15-filemenu.png" alt="ファイルメニュー。上に作業ファイルの一覧がある" class="shrink">
+    <figcaption>「ファイル ▾」の上半分が作業ファイルの一覧です。何ブロック・いつ更新したかも出ます。</figcaption>
+  </figure>
+
+  <p><strong>作業ファイルを切り替えると、本文だけでなく履歴も丸ごと切り替わります。</strong>
+     混ざりません。</p>
+
+  <h3>分ける基準</h3>
+  <p>量ではなく<strong>頭の切り替え</strong>です。仕事と趣味、制作と勉強のように、
+     <em>同時に考えたくないもの</em>を分けます。</p>
+  <p>逆に、関係があるなら1つに入れたままにしてください。分けると
+     「本日更新」も履歴も別々になり、行き来が面倒になります。</p>
+
+  <div class="note">
+    <strong>消したものは消えていません</strong>
+    「作業ファイルの整理」で片付けたものは、<code>_trash</code> フォルダへ移すだけです。
+    後から取り出せます。
+  </div>
+</section>
+
+<!-- ───────────────────────────── 10 -->
+<section id="s10">
+  <h2><span class="num">10</span>人に渡す — 配布用 HTML</h2>
+  <p>ツールバー右の「共有」、またはファイルメニューの「配布用 HTML を書き出す」を押すと、
+     <strong>HTML が1ファイルだけ</strong>出てきます。</p>
+  <ul class="plain">
+    <li>相手はそれを開くだけで読めます。何も入れる必要はありません。</li>
+    <li>インターネットに接続していなくても開けます。</li>
+    <li>どこかへ送信されることもありません。</li>
+    <li>読む専用なので、渡した相手が書き換えることはできません。</li>
+  </ul>
+  <p class="sub">Markdown で書き出すこともできます（ファイルメニュー →「Markdown で書き出す」）。
+     逆に、よそで書いた <code>.md</code> を読み込むこともできます。</p>
+</section>
+
+<!-- ───────────────────────────── 11 -->
+<section id="s11">
+  <h2><span class="num">11</span>見た目の設定</h2>
+
+  <figure>
+    <img src="img/17-settings-font.png" alt="設定画面。フォントと文字の大きさを選べる" class="shrink">
+    <figcaption>「設定」で、画面のフォント・コードのフォント・文字の大きさを変えられます。
+      選んだ瞬間に画面へ反映され、下の見本でも確かめられます。</figcaption>
+  </figure>
+
+  <p>「閉じる」を押すと、保存せずに元に戻ります。気に入ったら「保存する」を押してください。</p>
+  <p class="sub">画面右下のボタンで、明るい配色と暗い配色を切り替えられます。</p>
+</section>
+
+<!-- ───────────────────────────── 12 -->
+<section id="s12">
+  <h2><span class="num">12</span>キー操作</h2>
+  <table>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>このページの中を探す（畳んである中も探します）</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>元に戻す</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>やり直す</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>B</kbd></td><td>太字</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>インラインコード（<code>こういう字</code>）</td></tr>
+    <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>一段下げる / 戻す</td></tr>
+    <tr><td>行頭で <kbd>Backspace</kbd></td><td>下げた段を戻す</td></tr>
+  </table>
+  <p class="sub">ここに無い操作は、ボタンにマウスを乗せると説明が出ます。</p>
+</section>
+
+<footer>
+  この手引きは、アプリの「? 使い方」からいつでも開けます。<br>
+  画面写真はすべて、説明用に作った架空の内容です。
+</footer>
+
+</div>
+</body>
+</html>

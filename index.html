@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>やるべきこと-editor — 今日やったことが、勝手にまとまる</title>
+<meta name="description" content="書くのはメモ。出てくるのは週報。Windows用の買い切り作業メモ。インストール不要・完全オフライン・環境構築なし。">
+<link rel="icon" href="favicon.ico">
+<meta property="og:title" content="やるべきこと-editor">
+<meta property="og:description" content="今日やったことが、勝手にまとまる。Windows用の買い切り作業メモ。">
+<meta property="og:type" content="website">
+<style>
+  /* 外部のCDNは使わない。製品自体がそうしているので、紹介するページも同じ作りにする。 */
+  :root{
+    --ink:#16181d; --ink-2:#4a5160; --ink-3:#767f90;
+    --bg:#ffffff; --bg-2:#f6f7f9; --bg-3:#eceef2;
+    --line:#dde1e8;
+    --accent:#0f6fd6; --accent-ink:#0a4f99;
+    --warn-bg:#fff8e6; --warn-line:#e8cf8a; --warn-ink:#6b4e05;
+    --free:#0d7a5f;
+    --font: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic UI", "Yu Gothic",
+            "Noto Sans JP", Meiryo, system-ui, -apple-system, sans-serif;
+    --mono: "Cascadia Mono", Consolas, "SFMono-Regular", "Courier New", monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; font-family:var(--font); color:var(--ink); background:var(--bg);
+    font-size:16px; line-height:1.85; letter-spacing:.01em;
+  }
+  img{max-width:100%; height:auto; display:block}
+  a{color:var(--accent-ink)}
+
+  .wrap{max-width:960px; margin:0 auto; padding:0 20px}
+  .narrow{max-width:720px}
+
+  /* ---- 上の帯 ---- */
+  header{
+    position:sticky; top:0; z-index:20; background:rgba(255,255,255,.92);
+    backdrop-filter:saturate(180%) blur(8px);
+    border-bottom:1px solid var(--line);
+    padding-top:env(safe-area-inset-top, 0px);
+  }
+  .bar{
+    display:flex; align-items:center; gap:16px; height:56px;
+    flex-wrap:nowrap; /* 縮めても折り返さない */
+  }
+  .brand{display:flex; align-items:center; gap:9px; font-weight:700; white-space:nowrap}
+  .brand img{width:24px; height:24px}
+  .bar nav{margin-left:auto; display:flex; gap:20px; overflow:hidden}
+  .bar nav a{
+    color:var(--ink-2); text-decoration:none; font-size:14px; white-space:nowrap;
+  }
+  .bar nav a:hover{color:var(--ink)}
+  @media (max-width:620px){ .bar nav a.hide-sm{display:none} }
+
+  /* ---- 主役 ---- */
+  .hero{padding:72px 0 8px}
+  .kicker{
+    font-size:13px; letter-spacing:.14em; color:var(--ink-3);
+    text-transform:none; margin:0 0 18px;
+  }
+  h1{
+    font-size:clamp(30px, 5.4vw, 52px); line-height:1.3; margin:0 0 20px;
+    letter-spacing:-.01em; font-weight:800;
+  }
+  .lede{font-size:clamp(17px,2.2vw,20px); color:var(--ink-2); margin:0 0 28px; max-width:34em}
+  .lede strong{color:var(--ink)}
+
+  .buyrow{display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:30px 0 10px}
+  .btn{
+    display:inline-block; padding:13px 26px; border-radius:7px; font-weight:700;
+    text-decoration:none; font-size:16px; border:1px solid transparent;
+  }
+  .btn-main{background:var(--accent); color:#fff}
+  .btn-main:hover{background:var(--accent-ink)}
+  .btn-sub{background:var(--bg); color:var(--ink); border-color:var(--line)}
+  .btn-sub:hover{background:var(--bg-2)}
+  .btn[aria-disabled="true"]{opacity:.55; cursor:default; pointer-events:none}
+  .price{font-size:15px; color:var(--ink-2)}
+  .price b{font-size:20px; color:var(--ink)}
+
+  .specline{
+    font-size:14px; color:var(--ink-3); margin:18px 0 0;
+    display:flex; gap:8px 18px; flex-wrap:wrap;
+  }
+  .specline span{white-space:nowrap}
+
+  figure{margin:40px 0}
+  figure img{border:1px solid var(--line); border-radius:10px}
+  figcaption{font-size:13px; color:var(--ink-3); margin-top:10px}
+
+  /* ---- 節 ---- */
+  section{padding:56px 0}
+  section + section{border-top:1px solid var(--line)}
+  h2{font-size:clamp(22px,3vw,30px); line-height:1.4; margin:0 0 8px; letter-spacing:-.005em}
+  .sub{color:var(--ink-3); margin:0 0 36px; font-size:15px}
+  h3{font-size:19px; margin:0 0 8px}
+
+  .feat{display:grid; gap:44px}
+  .feat > div{display:grid; gap:24px; grid-template-columns:1fr}
+  @media (min-width:760px){
+    /* 画像の縦横比がまちまち（横長の画面と、縦長のメニュー）なので
+       中央で揃える。左右に寄せると片側が大きく空く。 */
+    .feat > div{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr); align-items:center; gap:34px}
+    .feat > div.flip > .txt{order:2}
+  }
+  /* 縦長の画面写真が行を無駄に高くするのを止める */
+  .feat img{max-height:360px; width:auto; margin-inline:auto}
+  /* 極端に横長の帯（整理モードの操作列は 2960x260）は段に入れると読めない。
+     横幅いっぱいに1枚で置く。 */
+  .feat > div.wide{grid-template-columns:1fr !important}
+  .feat > div.wide img{max-height:none; width:100%}
+  .feat p{margin:0 0 12px; color:var(--ink-2)}
+  .feat .num{
+    display:inline-block; font-family:var(--mono); font-size:12px; color:var(--accent-ink);
+    background:var(--bg-3); border-radius:4px; padding:2px 7px; margin-bottom:10px;
+  }
+  .feat img{border:1px solid var(--line); border-radius:8px}
+
+  ul.plain{margin:0; padding-left:1.25em; color:var(--ink-2)}
+  ul.plain li{margin:5px 0}
+
+  .grid2{display:grid; gap:24px; grid-template-columns:1fr}
+  @media (min-width:700px){ .grid2{grid-template-columns:1fr 1fr; gap:28px} }
+
+  .card{border:1px solid var(--line); border-radius:11px; padding:24px}
+  .card h3{display:flex; align-items:center; gap:10px; margin-bottom:6px}
+  .tag{
+    font-size:11.5px; font-weight:700; padding:3px 9px; border-radius:99px;
+    background:#e7f5f0; color:var(--free); white-space:nowrap;
+  }
+  .card p{color:var(--ink-2); margin:0 0 14px; font-size:15px}
+
+  .note{
+    background:var(--warn-bg); border:1px solid var(--warn-line); border-radius:10px;
+    padding:22px 24px; color:var(--warn-ink);
+  }
+  .note h3{margin:0 0 10px; color:var(--warn-ink)}
+  .note p, .note li{color:var(--warn-ink)}
+  .note p:last-child{margin-bottom:0}
+  kbd{
+    font-family:var(--mono); font-size:.88em; background:#fff; border:1px solid var(--warn-line);
+    border-radius:4px; padding:1px 6px;
+  }
+
+  dl.faq{margin:0}
+  dl.faq dt{font-weight:700; margin:24px 0 6px}
+  dl.faq dt:first-child{margin-top:0}
+  dl.faq dd{margin:0; color:var(--ink-2)}
+
+  table{width:100%; border-collapse:collapse; font-size:15px}
+  .scroll{overflow-x:auto}
+  th,td{text-align:left; padding:11px 14px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{color:var(--ink-3); font-weight:600; font-size:13.5px; white-space:nowrap}
+
+  footer{
+    border-top:1px solid var(--line); padding:40px 0 64px; color:var(--ink-3); font-size:14px;
+    padding-bottom:calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+  footer a{color:var(--ink-2)}
+
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#e8eaee; --ink-2:#b2b9c6; --ink-3:#848d9d;
+      --bg:#14161a; --bg-2:#1b1e24; --bg-3:#23272f;
+      --line:#2e333c;
+      --accent:#3c8ee0; --accent-ink:#8fc2f5;
+      --warn-bg:#2b2410; --warn-line:#5c4c1c; --warn-ink:#e8d49a;
+      --free:#5fd0ac;
+    }
+    :root:not([data-theme="light"]) header{background:rgba(20,22,26,.92)}
+    :root:not([data-theme="light"]) .tag{background:#123028}
+    :root:not([data-theme="light"]) kbd{background:#1b1e24}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <a class="brand" href="#top" style="text-decoration:none;color:inherit">
+      <img src="img/app-256.png" alt="">
+      <span>やるべきこと-editor</span>
+    </a>
+    <nav>
+      <a href="#what">何が違うのか</a>
+      <a href="#need" class="hide-sm">動作環境</a>
+      <a href="#free">無料のツール</a>
+      <a href="#faq" class="hide-sm">よくある質問</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+<div class="wrap hero">
+  <p class="kicker">Windows用 / 買い切り / インストール不要</p>
+  <h1>今日やったことが、<br>勝手にまとまる。</h1>
+  <p class="lede">
+    書くのはメモ。出てくるのは<strong>週報</strong>。<br>
+    今日どのセクションに手を入れたかを自分で数えなくていい作業メモです。
+  </p>
+
+  <div class="buyrow">
+    <a class="btn btn-main" href="#buy">買う</a>
+    <a class="btn btn-sub" href="guide/">使い方を全部見る（無料）</a>
+    <span class="price"><b>¥1,500</b> 買い切り</span>
+  </div>
+
+  <p class="specline">
+    <span>Windows 10 / 11</span>
+    <span>環境構築ゼロ</span>
+    <span>完全オフライン</span>
+    <span>データはPCの中だけ</span>
+  </p>
+
+  <figure>
+    <img src="img/01-overview.png" alt="やるべきこと-editor の画面全体。左に見出しの一覧、中央に本文、右に付箋が並んでいる。">
+    <figcaption>本体の画面。左が見出しの一覧、中央が本文、右が付箋。</figcaption>
+  </figure>
+</div>
+
+<section id="what" class="wrap">
+  <h2>何が違うのか</h2>
+  <p class="sub">メモアプリはもう足りています。これは「書いたものを後で提出する」ところまでを持ちます。</p>
+
+  <div class="feat">
+    <div>
+      <div class="txt">
+        <span class="num">01</span>
+        <h3>今日どこを触ったかが、自動で集まる</h3>
+        <p>
+          作業メモは膨らみます。週末に「今週なにをしたか」を思い出すのが一番面倒な作業です。
+        </p>
+        <p>
+          <strong>本日更新</strong>は、その日に書き換えたセクションだけを全ファイル横断で集めて1枚に出します。
+          思い出す作業が消えます。
+        </p>
+      </div>
+      <img src="img/13-today.png" alt="本日更新の画面。その日に変更のあったセクションが一覧で並んでいる。">
+    </div>
+
+    <div class="flip">
+      <div class="txt">
+        <span class="num">02</span>
+        <h3>期間を選ぶと、そのまま渡せる1枚になる</h3>
+        <p>
+          履歴から期間を選ぶと、<strong>1枚のHTMLファイル</strong>が出ます。
+          目次つき、画像は中に埋め込み済み。
+        </p>
+        <p>
+          相手はダブルクリックするだけ。アプリも通信も要りません。
+          そのまま添付して送れます。
+        </p>
+      </div>
+      <img src="img/16-history-html.png" alt="書き出したHTMLの例。左に目次、右に本文と画像が並んだ読み物になっている。">
+    </div>
+
+    <div class="wide">
+      <div class="txt">
+        <span class="num">03</span>
+        <h3>終わった話を畳んでも、履歴は消えない</h3>
+        <p>
+          <strong>整理モード</strong>は「何を数えないか」を切り替えます。
+          終わった項目を畳んで視界から外しても、書いたものと履歴はそのまま残ります。
+          消すか残すかの二択で悩まなくなります。
+        </p>
+      </div>
+      <img src="img/12-reorg.png" alt="整理モードの操作列。畳む・除外するなどの切り替えが横に並んでいる。">
+    </div>
+
+    <div class="flip">
+      <div class="txt">
+        <span class="num">04</span>
+        <h3>付箋は、本文に混ぜたくない用事の置き場</h3>
+        <p>
+          画面の右端の <strong>+</strong> で付箋を足せます。
+          思いついた短い用事を、本文の流れを崩さずに置いておけます。
+        </p>
+        <p>
+          仕事ごとに作業ファイルを分けることもできます。
+          切り替えると履歴ごと切り替わるので、別の案件の記録が混ざりません。
+        </p>
+      </div>
+      <img src="img/10-sticky.png" alt="画面右端に並んだ付箋。色分けされた短いメモが縦に並んでいる。">
+    </div>
+  </div>
+</section>
+
+<section class="wrap narrow">
+  <h2>ほかにできること</h2>
+  <p class="sub">画面写真つきの説明が全部あります。<a href="guide/">買う前に読めます。</a></p>
+  <ul class="plain">
+    <li>見出し・段落・引き出し（畳める箱）・表・コード・画像</li>
+    <li>Markdown ファイルの読み込み</li>
+    <li>画像はファイルに埋め込まれるので、フォルダを動かしても壊れない</li>
+    <li>文字の種類と大きさの変更</li>
+    <li>自動保存と、書き換えの履歴</li>
+    <li>2台のPCで同じデータを使う設定（OneDrive などの共有フォルダ経由）</li>
+  </ul>
+</section>
+
+<section id="need" class="wrap narrow">
+  <h2>動作環境と、正直に言っておくこと</h2>
+  <p class="sub">買ってから驚くことを減らしたいので、先に書きます。</p>
+
+  <div class="scroll">
+  <table>
+    <tr><th>対応OS</th><td>Windows 10 / 11（64bit）</td></tr>
+    <tr><th>入れるもの</th><td><strong>ありません。</strong>Node.js も Python も要りません（必要なものは中に入っています）</td></tr>
+    <tr><th>導入</th><td>zip を展開して、中の起動ファイルをダブルクリックするだけ。アンインストールはフォルダを消すだけ</td></tr>
+    <tr><th>通信</th><td><strong>しません。</strong>書いたものは全部あなたのPCの中に置かれます</td></tr>
+    <tr><th>画面</th><td>お使いのブラウザ（Edge / Chrome）で開きます。専用の窓として開きます</td></tr>
+    <tr><th>大きさ</th><td>zip 約34MB / 展開後 約86MB</td></tr>
+  </table>
+  </div>
+
+  <div class="note" style="margin-top:32px">
+    <h3>初めて起動するとき、Windows の警告が出ます</h3>
+    <p>
+      個人が作ったソフトには<strong>コード署名</strong>という有料の証明書が付いていません。
+      そのため Windows が「発行元が不明」として一度止めます。壊れているわけではありません。
+    </p>
+    <p>
+      出たときは <kbd>詳細情報</kbd> → <kbd>実行</kbd> を押してください。一度通せば以後は出ません。
+    </p>
+    <p style="margin-top:14px">
+      なお <a href="#faq">よくある質問</a> に、中身が何をしているかの確認方法を書いています。
+      <strong>信用できないものを「とりあえず実行」しないでください。</strong>それは正しい態度です。
+    </p>
+  </div>
+</section>
+
+<section id="buy" class="wrap narrow">
+  <h2>買う</h2>
+  <p class="sub">買い切りです。月額はありません。</p>
+
+  <div class="scroll">
+  <table>
+    <tr><th>やるべきこと-editor</th><td><b style="font-size:20px">¥1,500</b> 買い切り（更新は無料）</td></tr>
+  </table>
+  </div>
+
+  <div class="buyrow">
+    <a class="btn btn-main" href="#" aria-disabled="true" data-store="booth">BOOTH で買う（準備中）</a>
+    <a class="btn btn-sub" href="#" aria-disabled="true" data-store="gumroad">Gumroad（海外向け・準備中）</a>
+  </div>
+  <p style="font-size:14px;color:var(--ink-3)">
+    販売ページの準備ができ次第、ここのボタンが有効になります。
+  </p>
+</section>
+
+<section id="free" class="wrap">
+  <h2>Claude で作る人向けの、無料のツール</h2>
+  <p class="sub">
+    こちらは無料で、中身も公開しています。作っているものが違うので、上の製品とは別物です。
+  </p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>CbC Tools <span class="tag">無料・公開</span></h3>
+      <p>
+        Claude と一緒に作った常駐ツールが、フォルダのどこかに散らばって行方不明になる問題のための窓。
+        トレイにアイコン1個、窓1枚で「いまどれが生きているか」が分かります。
+      </p>
+      <p>
+        自分のツールを繋ぐ手順書（<code>CONNECT.md</code>）が入っているので、
+        <strong>それを Claude に読ませれば繋ぎ込みを任せられます。</strong>
+      </p>
+      <a class="btn btn-sub" href="https://github.com/suto648/cbc-tools">GitHub で見る</a>
+    </div>
+
+    <div class="card">
+      <h3>Claude セッション盤面 <span class="tag">無料・公開</span></h3>
+      <p>
+        Claude Code の会話を一覧で見て、ピン留めして、続きから開き直すための盤面。
+      </p>
+      <p>
+        CbC に繋いだ<strong>実例</strong>としても使えます。繋ぐ設定をそのまま同梱しています。
+      </p>
+      <a class="btn btn-sub" href="https://github.com/suto648/claude-session-board" data-store="board">GitHub で見る</a>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="wrap narrow">
+  <h2>よくある質問</h2>
+  <dl class="faq">
+    <dt>本当に何も入れなくていいのですか</dt>
+    <dd>
+      はい。動かすのに必要な部品（Node.js）は中に同梱しています。
+      Windows のアカウントが管理者でなくても動きます（別のPCの標準ユーザーで実際に確かめました）。
+    </dd>
+
+    <dt>書いたものはどこに保存されますか</dt>
+    <dd>
+      アプリのフォルダの中です。保存先は変えられます。クラウドには送りません。
+    </dd>
+
+    <dt>通信していないことを自分で確かめられますか</dt>
+    <dd>
+      できます。起動中にブラウザの開発者ツール（<kbd>F12</kbd>）のネットワークを見てください。
+      外部への通信は0件です。フォルダ内のファイルを検索して <code>http</code> で始まる外部アドレスを探しても構いません。
+    </dd>
+
+    <dt>アンインストールは</dt>
+    <dd>フォルダを削除するだけです。レジストリには何も書きません。</dd>
+
+    <dt>Mac / Linux で動きますか</dt>
+    <dd>いまは Windows だけです。</dd>
+
+    <dt>更新は有料ですか</dt>
+    <dd>無料です。買った人は新しい版を同じ場所から取り直せます。</dd>
+
+    <dt>2台のPCで同じメモを使えますか</dt>
+    <dd>
+      使えます。データの置き場所を共有フォルダ（OneDrive など）にします。
+      ただし<strong>2台で同時に開かないでください</strong>。交代で使う前提の作りです。
+    </dd>
+
+    <dt>Markdown ファイルとして開けますか</dt>
+    <dd>
+      読み込みはできます。保存の形式はこのアプリ専用です（見出しの畳み方や付箋を保つため）。
+      人に渡すときは HTML の書き出しを使ってください。
+    </dd>
+  </dl>
+</section>
+
+</main>
+
+<footer class="wrap">
+  <p>
+    やるべきこと-editor / CbC Tools / Claude セッション盤面 —
+    <a href="https://github.com/suto648">suto648</a>
+  </p>
+  <p style="margin-top:6px">
+    このページは外部のスクリプトを1つも読み込んでいません。紹介している製品と同じ作りです。
+  </p>
+</footer>
+
+</body>
+</html>
