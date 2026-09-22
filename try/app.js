@@ -4804,17 +4804,33 @@ var findBlock = ${findBlock.toString()};
   //  ★狙いは「ヘッダーが必要とする幅に画面が届いた瞬間に縮む」こと。
   //    余裕があるうちは何も削らない。
   // ============================================================
-  const TIGHT_LEVELS = 7;
+  // 段8以上（スマホなど）で、ヘッダーから外す操作。
+  // ★ここには「本物のボタンのid」だけを書く。押したらそのボタンをそのまま押す。
+  //   動きを書き写すと、片方だけ直したときに静かに食い違う。
+  const MORE_ITEMS = [
+    { group: '書く', ids: ['btnAddSection', 'btnAddHeading', 'btnAddParagraph',
+                          'btnAddCode', 'btnAddTable', 'btnAddSmallSection', 'btnAddImage'] },
+    { group: '文字', ids: ['btnInlineCode', 'btnBold'] },
+    { group: '戻す', ids: ['btnUndo', 'btnRedo'] },
+    { group: 'そのほか', ids: ['btnReorgMode', 'btnHistory'] },
+  ];
+
+  const TIGHT_LEVELS = 9;
   function fitToolbar() {
     const tb = document.getElementById('toolbar');
     if (!tb) return;
     // いったん全部戻してから、はみ出す間だけ段を上げる。
     for (let i = 1; i <= TIGHT_LEVELS; i++) tb.classList.remove('tight-' + i);
+    const moreWrap = document.getElementById('moreWrap');
+    if (moreWrap) moreWrap.hidden = true;
     let level = 0;
     // +1 は小数の丸め対策。ぴったりのときに無駄に縮めない。
     while (level < TIGHT_LEVELS && tb.scrollWidth > tb.clientWidth + 1) {
       level++;
       tb.classList.add('tight-' + level);
+      // 段8に入る＝ヘッダーから操作を外し始める。外した先（…）を先に出す。
+      // 出してから測り直さないと、… のぶんの幅を数えそこねる。
+      if (level === 8 && moreWrap) moreWrap.hidden = false;
     }
   }
   if (window.ResizeObserver) {
@@ -4826,6 +4842,119 @@ var findBlock = ${findBlock.toString()};
   // 字幅が確定してから測る（フォントの読み込みで幅が変わる）
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitToolbar);
   setTimeout(fitToolbar, 0);
+
+  // ============================================================
+  //  「…」— 狭い画面でヘッダーから外した操作の入れ物
+  // ------------------------------------------------------------
+  //  中身は本物のボタンを指しているだけ。押すとそのボタンを押す。
+  //  だから「整理モードが今ONか」「元に戻せるか」といった状態も、
+  //  本物のボタンから読んでそのまま映す（二重に持たない）。
+  // ============================================================
+  const moreWrap = $('#moreWrap');
+  const btnMore = $('#btnMore');
+  const moreMenu = $('#moreMenu');
+
+  // 名前は本物のボタンから取る。ここで書き直すと呼び名が2つになる。
+  // ★絵だけのボタン（</> や ↩）は、見た目の文字をそのまま使うと
+  //   メニューで「</>」「↩」と並んで何のことか分からなくなる。
+  //   読み上げ用の名前（aria-label）と説明（title）を先に見る。
+  //   見る順: .btn-label（字つきのボタン）→ aria-label（絵だけのボタンに付けてある）
+  //           → 見えている文字 → title の頭。
+  function labelOfButton(src) {
+    const lbl = src.querySelector('.btn-label');
+    if (lbl && lbl.textContent.trim()) return lbl.textContent.trim();
+    const aria = src.getAttribute('aria-label');
+    if (aria && aria.trim()) return aria.trim();
+    const t = src.textContent.trim();
+    if (t) return t;
+    if (src.title) return src.title.split(/[：:（(]/)[0].trim();   // 「整理モード：…」→「整理モード」
+    return src.id;
+  }
+
+  function buildMoreMenu() {
+    moreMenu.innerHTML = '';
+    // ★「今このボタンが見えているか」で判断してはいけない。
+    //   ここに入る物は、狭いから隠してあるだけで、使える。
+    //   出してはいけないのは「閲覧モードで編集ができない」ときだけ。
+    const viewing = document.body.classList.contains('view-mode');
+    let any = false;
+
+    for (const sec of MORE_ITEMS) {
+      const usable = sec.ids
+        .map(id => document.getElementById(id))
+        .filter(el => el && !el.hidden)
+        .filter(el => !(viewing && el.closest('.edit-only')));
+      if (!usable.length) continue;
+
+      const label = document.createElement('div');
+      label.className = 'dropdown-label';
+      label.textContent = sec.group;
+      moreMenu.appendChild(label);
+
+      for (const src of usable) {
+        const b = document.createElement('button');
+        b.className = 'dropdown-item';
+        b.setAttribute('role', 'menuitem');
+        b.disabled = src.disabled;
+
+        const title = document.createElement('span');
+        title.className = 'dropdown-item-title';
+        title.textContent = labelOfButton(src);
+        b.appendChild(title);
+
+        if (src.classList.contains('active')) {
+          const on = document.createElement('span');
+          on.className = 'dropdown-item-meta';
+          on.textContent = 'ON';
+          b.appendChild(on);
+        }
+        if (src.title) b.setAttribute('data-help', src.title);
+
+        b.addEventListener('click', () => {
+          setMoreMenuOpen(false);
+          src.click();              // ★本物を押す
+        });
+        moreMenu.appendChild(b);
+        any = true;
+      }
+      const sep = document.createElement('div');
+      sep.className = 'dropdown-sep';
+      moreMenu.appendChild(sep);
+    }
+    // 最後の区切り線は要らない
+    const last = moreMenu.lastElementChild;
+    if (last && last.className === 'dropdown-sep') last.remove();
+
+    if (!any) {
+      const p = document.createElement('div');
+      p.className = 'dropdown-hint';
+      p.textContent = 'ここに入る操作はありません';
+      moreMenu.appendChild(p);
+    }
+  }
+
+  function setMoreMenuOpen(open) {
+    if (open) buildMoreMenu();
+    moreMenu.hidden = !open;
+    btnMore.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btnMore.classList.toggle('is-open', open);
+    if (!open && moreMenu.contains(document.activeElement)) btnMore.focus();
+  }
+
+  if (btnMore) {
+    btnMore.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setMoreMenuOpen(moreMenu.hidden);
+    });
+    document.addEventListener('click', (e) => {
+      if (!moreMenu.hidden && !moreMenu.contains(e.target) && e.target !== btnMore) {
+        setMoreMenuOpen(false);
+      }
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !moreMenu.hidden) setMoreMenuOpen(false);
+    });
+  }
 
   const fileMenu = $('#fileMenu');
   const btnFileMenu = $('#btnFileMenu');
@@ -5507,6 +5636,31 @@ var findBlock = ${findBlock.toString()};
   //   「右を見ながら左上を押す」動きになっていた。外した。
   const stickyAddRight = $('#btnAddStickyRight');
   if (stickyAddRight) stickyAddRight.addEventListener('click', () => openStickyModal());
+
+  // ★付箋の束は、画面が狭いと右端に格納され「かざすと出てくる」作りになっている。
+  //   指で使う端末にはかざす操作が無いので、そのままでは二度と開けない
+  //   （スマホで実際に、切れた青い帯が出たまま触れなかった）。
+  //   押したら出る／もう一度押す・外を押すとしまう、を足す。
+  //   かざせる端末の動きは変えない。
+  (function enableStickyTapOnTouch() {
+    const box = document.getElementById('stickyNotesContainer');
+    if (!box) return;
+    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    if (!coarse) return;
+
+    box.addEventListener('click', (e) => {
+      // 付箋そのものを押したときは、その付箋を開く動きに任せる
+      if (!box.classList.contains('is-out') && !e.target.closest('.sticky-note')) {
+        e.stopPropagation();
+        box.classList.add('is-out');
+      }
+    });
+    document.addEventListener('click', (e) => {
+      if (box.classList.contains('is-out') && !box.contains(e.target)) {
+        box.classList.remove('is-out');
+      }
+    });
+  })();
   $('#stickyCancel').addEventListener('click', () => closeStickyModal());
   $('#stickyModal').addEventListener('click', (e) => {
     if (e.target.id === 'stickyModal') closeStickyModal();

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>やるべきこと</title>
-  <link rel="stylesheet" href="style.css?v=1.2.0-202609221341">
+  <link rel="stylesheet" href="style.css?v=1.2.0-202609221432">
   <!-- アイコン。用途ごとに要る形が違う:
        ・SVG   … 対応ブラウザのタブ（拡大しても綺麗）
        ・PNG   … アプリモードの窓とタスクバー（SVG は使われない）
@@ -26,7 +26,7 @@
     <span class="title-display" id="titleDisplay">やるべきこと</span>
     <div class="toolbar-group toolbar-file-group">
       <button id="btnFileMenu" aria-haspopup="true" aria-expanded="false" title="読み込みと書き出し">
-        <i class="ti ti-file-type-doc"></i> ファイル <span class="menu-caret">▾</span>
+        <i class="ti ti-file-type-doc"></i><span class="btn-label"> ファイル </span><span class="menu-caret">▾</span>
       </button>
       <!-- ★説明文は常に出さず、かざしたときだけ下の1行に出す。
            全部を常時出すと、項目より説明の方が場所を取って読めなくなる。
@@ -84,11 +84,11 @@
       <button id="btnAddCode" title="コードブロックを追加">Code</button>
       <button id="btnAddTable" title="テーブルを追加">表</button>
       <button id="btnAddSmallSection" title="引きだし（小さな折りたたみ・箇条書き向け）を追加">引きだし</button>
-      <button id="btnAddImage" title="画像を追加"><i class="ti ti-photo"></i></button>
+      <button id="btnAddImage" title="画像を追加" aria-label="画像"><i class="ti ti-photo"></i></button>
     </div>
     <div class="toolbar-group edit-only">
-      <button id="btnInlineCode" title="インラインコード (Ctrl+E)"><code>&lt;/&gt;</code></button>
-      <button id="btnBold" title="太字 (Ctrl+B)"><b>B</b></button>
+      <button id="btnInlineCode" title="インラインコード (Ctrl+E)" aria-label="インラインコード"><code>&lt;/&gt;</code></button>
+      <button id="btnBold" title="太字 (Ctrl+B)" aria-label="太字"><b>B</b></button>
     </div>
     <div class="toolbar-group edit-only">
       <!-- ★元に戻す・やり直しは記号が万国共通なので、字を外してアイコンだけにした。
@@ -112,6 +112,15 @@
     <span class="save-status edit-only" id="saveStatus"><span class="save-label">保存しました</span></span>
     <span class="mode-indicator" id="modeIndicator">編集モード</span>
     <div class="toolbar-group toolbar-actions">
+      <!-- ★画面が狭いとき（スマホなど）に、ヘッダーから溢れた操作をここへ入れる。
+           以前は狭くすると右端の「設定」が画面の外に出て、押せなくなっていた。
+           削るのではなく、入れ物を用意して全部届くようにする。
+           中身は app.js が「本物のボタン」を指して作るので、動きは二重に持たない。 -->
+      <div class="toolbar-more" id="moreWrap" hidden>
+        <button id="btnMore" class="icon-only glyph" title="そのほかの操作"
+                aria-label="そのほかの操作" aria-haspopup="menu" aria-expanded="false">…</button>
+        <div class="dropdown-menu" id="moreMenu" hidden role="menu"></div>
+      </div>
       <button id="btnToggleMode" title="モード切替"><i class="ti ti-eye"></i><span class="btn-label"> 閲覧</span></button>
       <!-- 使い方と設定はアイコンだけ。どちらも記号が定着している。 -->
       <button id="btnGuide" class="toolbar-guide-btn icon-only glyph" title="使い方と、整理のしかた" aria-label="使い方">?</button>
@@ -186,9 +195,11 @@
     <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
       <button class="close-btn modal-close-btn settings-close-btn" id="settingsClose" aria-label="設定を閉じる"><i class="ti ti-x"></i></button>
       <div class="settings-hero">
-        <span class="settings-kicker">Phase 2</span>
+        <!-- ★「Phase 2」という作っている側の符丁が出ていた。
+             説明も「appConfig としてまとめて管理します」と、中の言葉だった。
+             買った人が読む場所なので、その人の言葉で書く。 -->
         <h2 id="settingsTitle"><i class="ti ti-settings"></i> 表示と保存の設定</h2>
-        <p>ヘッダー表示名、ブラウザタイトル、自動保存間隔、Redo 上限を appConfig としてまとめて管理します。</p>
+        <p>画面に出す名前と、保存のしかたを決めます。</p>
       </div>
       <form class="settings-form" id="settingsForm">
         <div class="settings-grid">
@@ -211,8 +222,8 @@
             </div>
           </label>
           <label class="settings-field">
-            <span class="settings-label">Redo 上限</span>
-            <span class="settings-help">Undo / Redo 履歴として保持する件数です。</span>
+            <span class="settings-label">元に戻せる回数</span>
+            <span class="settings-help">「元に戻す」「やり直し」で遡れる件数です。</span>
             <div class="settings-input-wrap">
               <input type="number" id="settingsRedoLimit" min="10" max="500" step="10" inputmode="numeric">
               <span class="settings-suffix">件</span>
@@ -552,13 +563,13 @@
   <script src="vendor/highlight/vbnet.min.js"></script>
   <script src="vendor/highlight/powershell.min.js"></script>
   <!-- ここから下はオンライン版だけの読み込み（tools/build-online.js が入れる） -->
-  <script src="online/node-shim.js?v=1.2.0-202609221341"></script>
-  <script src="online/persist.js?v=1.2.0-202609221341"></script>
-  <script src="online/load-server.js?v=1.2.0-202609221341"></script>
+  <script src="online/node-shim.js?v=1.2.0-202609221432"></script>
+  <script src="online/persist.js?v=1.2.0-202609221432"></script>
+  <script src="online/load-server.js?v=1.2.0-202609221432"></script>
   <script>window.YARUBEKI_ONLINE_BASE = "engine/";</script>
-  <script src="online/boot.js?v=1.2.0-202609221341"></script>
+  <script src="online/boot.js?v=1.2.0-202609221432"></script>
   <!-- ここまで -->
-  <script src="app.js?v=1.2.0-202609221341"></script>
+  <script src="app.js?v=1.2.0-202609221432"></script>
 <!-- オンライン版（ブラウザで試す版）にだけ差し込まれる部分。
      tools/build-online.js が </body> の直前へそのまま入れる。
 
@@ -618,6 +629,22 @@
     margin: 0 0 12px; padding: 9px 11px; border-radius: 7px;
     background: rgba(255,170,60,.10); border: 1px solid rgba(255,170,60,.35);
     color: #e8c07a; font-size: 12px; line-height: 1.7;
+  }
+
+  /* ★スマホ。実測で、この印（右下）が付箋を足すボタンと重なっていた
+     （印 197〜346 / ボタン 308〜342）。印は小さくして左下へ寄せる。
+     ★この指定は style.css ではなくここに置く。
+       この <style> は style.css より後に読まれるので、
+       向こうに書いても同じ強さのこちらに負けて効かない（実際に効かなかった）。 */
+  @media (max-width: 560px) {
+    #trialBadge {
+      left: 12px; right: auto; bottom: 12px;
+      padding: 7px 11px; font-size: 11.5px;
+    }
+    #trialPanel {
+      left: 12px; right: 12px; width: auto; bottom: 56px;
+      max-height: calc(100vh - 80px); overflow-y: auto;
+    }
   }
 </style>
 

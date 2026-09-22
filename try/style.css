@@ -1280,7 +1280,11 @@ body.view-mode .ime-debug-panel {
   top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
-  z-index: 500;
+  /* ★500 だと、付箋の束（800）とその追加ボタン（801）が
+     画面を覆ったはずの上に浮いたままになる（スマホで実際にそう見えた）。
+     覆うものは、浮いているものより上に置く。
+     付箋の編集窓（9000）はさらに上なので、そこは越えない。 */
+  z-index: 8500;
   align-items: center;
   justify-content: center;
 }
@@ -1950,7 +1954,10 @@ body.view-mode .sticky-notes-container {
     pointer-events: auto;
   }
   .sticky-notes-container:hover,
-  .sticky-notes-container:focus-within {
+  .sticky-notes-container:focus-within,
+  /* ★指で使う端末にはホバーが無い。格納したままだと二度と開けない。
+     はみ出している端を押したら開く（app.js が is-out を付け外しする）。 */
+  .sticky-notes-container.is-out {
     transform: translateX(-18px);
   }
   /* Drawer depth cue + a soft hint that the stack pulls out */
@@ -3041,6 +3048,91 @@ body.view-mode .dropdown-item.edit-only-item { display: none; }
    （画像だけは本文の追加口に無いので、段7でも残す） */
 .toolbar.tight-6 .toolbar-group.blocks-1 { display: none; }
 .toolbar.tight-7 .toolbar-group.blocks-2 > button:not(#btnAddImage) { display: none; }
+
+/* 段8・段9: スマホの幅。ここまで来ると、字を削っても物理的に入らない。
+   削るのではなく「…」へ移す。移した先から全部押せる。
+   ★以前はここで右端の設定が画面の外に出て、押せなくなっていた。
+     360px の画面で、ヘッダーの中身 559px に対して器が 360px だった。 */
+.toolbar.tight-8 .toolbar-group.blocks-1,
+.toolbar.tight-8 .toolbar-group.blocks-2,
+.toolbar.tight-8 #btnInlineCode,
+.toolbar.tight-8 #btnBold,
+.toolbar.tight-8 #btnUndo,
+.toolbar.tight-8 #btnRedo,
+.toolbar.tight-8 #btnReorgMode,
+.toolbar.tight-8 #btnHistory { display: none; }
+
+/* 段9: 「ファイル」も絵だけにする（いちばん狭い画面用） */
+.toolbar.tight-9 #btnFileMenu .btn-label,
+.toolbar.tight-9 #btnFileMenu .menu-caret { display: none; }
+.toolbar.tight-9 #btnFileMenu { padding-left: 8px; padding-right: 8px; }
+
+/* 「…」の入れ物 */
+.toolbar-more { position: relative; display: inline-flex; }
+.toolbar-more[hidden] { display: none !important; }
+.toolbar-more .dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
+}
+#btnMore { font-size: 17px; line-height: 1; letter-spacing: 0.06em; }
+
+/* ===== スマホで開いたとき ==========================================
+   実測（触る前）: 360px の画面で、ヘッダーの中身が 559px。
+   右端の「設定」は x=531〜559 で、**完全に画面の外**にあり押せなかった。
+   付箋も右へはみ出して切れていた。
+   ここは「入るように詰める」のではなく「入る形に変える」。 */
+@media (max-width: 560px) {
+  /* ★メニューはボタン基準ではなく「画面基準」で置く。
+     ボタン基準のまま幅だけ画面いっぱいにすると、右端のボタンから左へ
+     伸びて画面の外へ出る（実際に「…」のメニューが左に飛び出し、
+     中身が1文字も見えなかった。幅366pxに対し左端が -101px だった）。 */
+  /* ★指定の強さに注意。上のほうに .toolbar-more .dropdown-menu（クラス2つ）が
+     あるので、.dropdown-menu（クラス1つ）だけでは負けて効かない。
+     画面の幅で切り替えても、強さの勝ち負けは変わらない。 */
+  .toolbar-more .dropdown-menu,
+  .toolbar-file-group .dropdown-menu,
+  .toolbar .dropdown-menu {
+    position: fixed;
+    top: calc(var(--toolbar-h) + 6px);
+    left: 12px;
+    right: 12px;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    max-height: calc(100vh - var(--toolbar-h) - 24px);
+    overflow-y: auto;
+  }
+
+  /* ★付箋の幅は広げない。
+     いったん left:6px/right:6px にして画面いっぱいにしたら、
+     格納の動き（translateX）と噛み合って**左端が画面の外へ出て**
+     文字の頭が切れた。付箋は右端から引き出す作りなので、
+     右に貼り付けたまま、画面に収まる幅に留める。 */
+  .sticky-notes-container { right: 0; left: auto; }
+  .sticky-note { max-width: min(170px, calc(100vw - 56px)); }
+
+  main { padding: 18px 14px 120px; }
+}
+
+/* 指で押す端末では、当たり判定を大きくする。
+   マウスの 22px は指には小さい（親指で隣を押してしまう）。 */
+@media (pointer: coarse) {
+  .toolbar button,
+  .dropdown-item {
+    min-height: 40px;
+  }
+  /* ★.icon-only だけに付けていて取りこぼした。
+     「閲覧」は字を隠すと絵だけになるが .icon-only ではないので 28px のままだった。
+     ★さらに .toolbar button.icon-only（クラス2つ）が min-width: 28px を
+       持っているので、.toolbar button（クラス1つ）だけでは負ける。
+       画面幅で囲っても強さは上がらない。同じ強さで書き直す。 */
+  .toolbar button,
+  .toolbar button.icon-only,
+  .toolbar button.icon-only.glyph { min-width: 40px; }
+  .dropdown-item { padding-top: 10px; padding-bottom: 10px; }
+}
 
 /* ★hidden を確実に効かせる。
    .toolbar button に display 指定があると [hidden] が負けて、
