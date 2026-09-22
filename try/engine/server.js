@@ -1402,7 +1402,13 @@ function buildHistoryMarkdown(query) {
       if (f <= to) endDate = f;
     }
 
-    if (baseDate && endDate && baseDate !== endDate) {
+    // ★以前は baseDate !== endDate を条件にしていたため、
+    //   写しが1日ぶんしか無い＝同じ日を選んだときに、この中身が丸ごと飛ばされ、
+    //   **0 byte の Markdown ファイルが落ちてきていた**（HTML 版は枠を付けるので気づけない）。
+    //   使い始めた当日に履歴を書き出す人が最初に踏む道なので、いちばん困る。
+    //   日誌（daily-log）を使う経路は2日ぶん要らないし、写しを差分する経路は
+    //   もともと i + 1 < files.length で守られている。条件を外して差し支えない。
+    if (baseDate && endDate) {
       const todayDate = today();
       // Day-by-day: daily logs (primary) with snapshot diff (fallback)
       for (let i = 0; i < files.length; i++) {
@@ -1482,10 +1488,24 @@ function historyFileLabel(from, to) {
 app.get('/api/export-history-md', (req, res) => {
   const r = buildHistoryMarkdown(req.query);
   if (!r.ok) return res.status(r.status).json({ error: r.error });
+
+  // ★中身が無いときに 0 byte のファイルを渡さない。
+  //   受け取った人は「壊れている」としか思えないし、
+  //   「その期間に変更が無かった」ことも伝わらない。
+  //   HTML 版は枠があるので必ず何か出るが、Markdown は素のまま出るので
+  //   ここで言葉を足す。
+  let md = r.md;
+  if (!String(md || '').trim()) {
+    const fmt = (d) => String(d).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1/$2/$3');
+    md = '# 変更の履歴\n\n' +
+      fmt(req.query.from) + ' 〜 ' + fmt(req.query.to) + '\n\n' +
+      'この期間に記録された変更はありません。\n';
+  }
+
   res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
   res.setHeader('Content-Disposition',
     `attachment; filename="history_${historyFileLabel(req.query.from, req.query.to)}.md"`);
-  res.send(r.md);
+  res.send(md);
 });
 
 // 履歴を「1ファイルで完結する HTML」として書き出す。
