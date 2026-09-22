@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>やるべきこと</title>
-  <link rel="stylesheet" href="style.css?v=1.2.2-202609230539">
+  <link rel="stylesheet" href="style.css?v=1.2.2-202609230720">
   <!-- アイコン。用途ごとに要る形が違う:
        ・SVG   … 対応ブラウザのタブ（拡大しても綺麗）
        ・PNG   … アプリモードの窓とタスクバー（SVG は使われない）
@@ -567,13 +567,13 @@
   <script src="vendor/highlight/vbnet.min.js"></script>
   <script src="vendor/highlight/powershell.min.js"></script>
   <!-- ここから下はオンライン版だけの読み込み（tools/build-online.js が入れる） -->
-  <script src="online/node-shim.js?v=1.2.2-202609230539"></script>
-  <script src="online/persist.js?v=1.2.2-202609230539"></script>
-  <script src="online/load-server.js?v=1.2.2-202609230539"></script>
+  <script src="online/node-shim.js?v=1.2.2-202609230720"></script>
+  <script src="online/persist.js?v=1.2.2-202609230720"></script>
+  <script src="online/load-server.js?v=1.2.2-202609230720"></script>
   <script>window.YARUBEKI_ONLINE_BASE = "engine/";</script>
-  <script src="online/boot.js?v=1.2.2-202609230539"></script>
+  <script src="online/boot.js?v=1.2.2-202609230720"></script>
   <!-- ここまで -->
-  <script src="app.js?v=1.2.2-202609230539"></script>
+  <script src="app.js?v=1.2.2-202609230720"></script>
 <!-- オンライン版（ブラウザで試す版）にだけ差し込まれる部分。
      tools/build-online.js が </body> の直前へそのまま入れる。
 
@@ -724,17 +724,25 @@
 
     // 保存を守ってほしいと申し込めなかったブラウザ（Safari など）には、
     // 自動で消えうることと、その避け方を出す。
-    // ★判定は「申し込む口が無い（null）」ときだけ。
-    //   Chrome は口があっても断る（false）ことが普通にあるが、あちらは
-    //   置き場所が足りないときに古いものから消すだけで、7日の話ではない。
-    //   false でも出していたら、Chromium でも Safari 向けの文が出た（実測）。
+    // ★出し分けは「Apple の WebKit かどうか」で決める。
+    //
+    //   persist() の返り値では見分けられない。実測:
+    //     Chrome       … 口はある。false を返す（＝置き場所が足りないときだけ消える）
+    //     本物の Safari … 口はある。false を返す（＝7日で消える）
+    //   同じ false でも意味が違う。だからブラウザそのものを見る。
+    //
+    //   iPhone / iPad のブラウザは中身が全部 Apple の WebKit なので、
+    //   Chrome を名乗っていても navigator.vendor は Apple になる。
+    //   ＝消える側をちょうど拾える。
     const warn = document.getElementById('trialEvict');
+    const appleWebKit = navigator.vendor === 'Apple Computer, Inc.' ||
+                        typeof window.GestureEvent !== 'undefined';
     const granted = api.persistGranted ? api.persistGranted() : undefined;
-    if (granted !== null) { warn.hidden = true; return; }
+    if (!appleWebKit || granted === true) { warn.hidden = true; return; }
     warn.innerHTML =
-      '<strong>Safari をお使いの方へ</strong><br>' +
-      'Safari は、7日間このページを開かないと、書いたものを自動で消します。' +
-      '（このブラウザでは「消さないでほしい」と申し込む口がありませんでした）<br>' +
+      '<strong>Safari・iPhone・iPad でお使いの方へ</strong><br>' +
+      '7日間このページを開かないと、書いたものが自動で消えます（Apple の仕様です。' +
+      '「消さないでほしい」と申し込みましたが、認められませんでした）。<br>' +
       '共有ボタンから<strong>ホーム画面に追加</strong>しておくと、その対象から外れます。' +
       '大事なものは、ファイルメニューから書き出して手元に置いてください。';
     warn.hidden = false;
