@@ -89,7 +89,8 @@ ready = (async function start() {
       // 設定画面から呼ぶための口
       usage: () => persist.usage(),
       wipe: async () => { await persist.clearAll(); location.reload(); },
-      problem: () => persist.problem
+      problem: () => persist.problem,
+      persistGranted: () => persist.persistGranted
     };
   } catch (e) {
     bootError = 'オンライン版の起動に失敗しました: ' + (e && e.message || e);

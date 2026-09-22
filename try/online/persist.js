@@ -44,11 +44,18 @@ function createPersist() {
   let queue = Promise.resolve();   // 書き込みの順番を守るための一本道
   let broken = null;               // 保存できなくなった理由（画面に出す）
 
+  let persistAsked = null;   // true=申告できた / false=断られた / null=申告する口が無い
+
   async function boot() {
     try {
       // 「後で勝手に消さないでほしい」と申告しておく。断られても動く。
+      // ★Safari にはこの申告の口が無い（実測: navigator.storage.persist が未定義）。
+      //   そして Safari は「7日間そのサイトを触らないと、書いたものを自動で消す」。
+      //   （出典: webkit.org のブログ「Full Third-Party Cookie Blocking and More」。
+      //     ホーム画面に追加したものは Safari の外なので対象外）
+      //   申告できたかどうかを覚えておき、できなかったときは画面で伝える。
       if (navigator.storage && navigator.storage.persist) {
-        try { await navigator.storage.persist(); } catch (_) {}
+        try { persistAsked = await navigator.storage.persist(); } catch (_) { persistAsked = false; }
       }
       db = await openDb();
     } catch (e) {
@@ -125,7 +132,9 @@ function createPersist() {
 
   return {
     boot, onChange, flush, usage, clearAll,
-    get problem() { return broken; }
+    get problem() { return broken; },
+    // 保存を守ってほしいと申告できたか（できなかった＝自動で消されうる）
+    get persistGranted() { return persistAsked; }
   };
 }
 

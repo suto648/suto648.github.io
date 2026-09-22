@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>やるべきこと</title>
-  <link rel="stylesheet" href="style.css?v=1.2.2-202609221543">
+  <link rel="stylesheet" href="style.css?v=1.2.3-202609230537">
   <!-- アイコン。用途ごとに要る形が違う:
        ・SVG   … 対応ブラウザのタブ（拡大しても綺麗）
        ・PNG   … アプリモードの窓とタスクバー（SVG は使われない）
@@ -567,13 +567,13 @@
   <script src="vendor/highlight/vbnet.min.js"></script>
   <script src="vendor/highlight/powershell.min.js"></script>
   <!-- ここから下はオンライン版だけの読み込み（tools/build-online.js が入れる） -->
-  <script src="online/node-shim.js?v=1.2.2-202609221543"></script>
-  <script src="online/persist.js?v=1.2.2-202609221543"></script>
-  <script src="online/load-server.js?v=1.2.2-202609221543"></script>
+  <script src="online/node-shim.js?v=1.2.3-202609230537"></script>
+  <script src="online/persist.js?v=1.2.3-202609230537"></script>
+  <script src="online/load-server.js?v=1.2.3-202609230537"></script>
   <script>window.YARUBEKI_ONLINE_BASE = "engine/";</script>
-  <script src="online/boot.js?v=1.2.2-202609221543"></script>
+  <script src="online/boot.js?v=1.2.3-202609230537"></script>
   <!-- ここまで -->
-  <script src="app.js?v=1.2.2-202609221543"></script>
+  <script src="app.js?v=1.2.3-202609230537"></script>
 <!-- オンライン版（ブラウザで試す版）にだけ差し込まれる部分。
      tools/build-online.js が </body> の直前へそのまま入れる。
 
@@ -629,11 +629,12 @@
     background: none; border: 0; color: var(--fg3, #6b7688);
     font-size: 16px; line-height: 1; cursor: pointer; padding: 4px;
   }
-  #trialWarn {
+  #trialWarn, #trialEvict {
     margin: 0 0 12px; padding: 9px 11px; border-radius: 7px;
     background: rgba(255,170,60,.10); border: 1px solid rgba(255,170,60,.35);
     color: #e8c07a; font-size: 12px; line-height: 1.7;
   }
+  #trialEvict[hidden] { display: none !important; }
 
   /* ★スマホ。実測で、この印（右下）が付箋を足すボタンと重なっていた
      （印 197〜346 / ボタン 308〜342）。印は小さくして左下へ寄せる。
@@ -670,6 +671,10 @@
     <li>閲覧データを消すと、書いたものも消えます</li>
     <li>自動のバックアップはありません</li>
   </ul>
+  <!-- Safari には「保存を守ってほしい」と申し込む口が無く（実測）、
+       さらに 7日間そのサイトを開かないと書いたものを自動で消す。
+       消えてから知らせるのでは遅いので、先に言う。 -->
+  <div id="trialEvict" hidden></div>
   <p>
     ずっと使うなら、PCに入れる版をどうぞ。保存先が自分のPCのフォルダになり、
     ファイルとして残ります。
@@ -715,7 +720,24 @@
     const u = await api.usage();
     el.textContent = u && u.quota
       ? 'このブラウザでの使用量: ' + fmt(u.used) + ' / 使える目安 ' + fmt(u.quota)
-      : '';
+      : '';   // Safari は使用量を教えてくれない（実測）。無ければ黙って出さない。
+
+    // 保存を守ってほしいと申し込めなかったブラウザ（Safari など）には、
+    // 自動で消えうることと、その避け方を出す。
+    // ★判定は「申し込む口が無い（null）」ときだけ。
+    //   Chrome は口があっても断る（false）ことが普通にあるが、あちらは
+    //   置き場所が足りないときに古いものから消すだけで、7日の話ではない。
+    //   false でも出していたら、Chromium でも Safari 向けの文が出た（実測）。
+    const warn = document.getElementById('trialEvict');
+    const granted = api.persistGranted ? api.persistGranted() : undefined;
+    if (granted !== null) { warn.hidden = true; return; }
+    warn.innerHTML =
+      '<strong>Safari をお使いの方へ</strong><br>' +
+      'Safari は、7日間このページを開かないと、書いたものを自動で消します。' +
+      '（このブラウザでは「消さないでほしい」と申し込む口がありませんでした）<br>' +
+      '共有ボタンから<strong>ホーム画面に追加</strong>しておくと、その対象から外れます。' +
+      '大事なものは、ファイルメニューから書き出して手元に置いてください。';
+    warn.hidden = false;
   }
 
   // 保存できない環境（プライベートウィンドウ等）は、黙って失敗させない。
