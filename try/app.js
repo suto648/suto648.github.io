@@ -5167,8 +5167,14 @@ var findBlock = ${findBlock.toString()};
       row.className = 'project-manage-row' + (p.id === projectsCache.currentId ? ' is-current' : '');
       const info = document.createElement('div');
       info.className = 'project-manage-info';
+      // ★名前は名前だけを包む。
+      //   以前は名前と「開いています」を1つの箱に入れ、その箱に
+      //   「はみ出したら…で省略」を付けていたため、名前が長いと
+      //   **印の方が切れた**（実機で「開いていま」まで見えていた）。
+      //   省略するのは名前だけにする。
       info.innerHTML =
-        '<span class="project-manage-name">' + escapeHtml(p.name) +
+        '<span class="project-manage-name">' +
+        '<span class="project-manage-name-text">' + escapeHtml(p.name) + '</span>' +
         (p.id === projectsCache.currentId ? '<span class="project-badge">開いています</span>' : '') +
         '</span>' +
         '<span class="project-manage-meta">' + escapeHtml(describeProject(p)) + '</span>';

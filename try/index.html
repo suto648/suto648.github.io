@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>やるべきこと</title>
-  <link rel="stylesheet" href="style.css?v=1.2.1-202609221442">
+  <link rel="stylesheet" href="style.css?v=1.2.2-202609221543">
   <!-- アイコン。用途ごとに要る形が違う:
        ・SVG   … 対応ブラウザのタブ（拡大しても綺麗）
        ・PNG   … アプリモードの窓とタスクバー（SVG は使われない）
@@ -165,7 +165,11 @@
   <!-- Main Content -->
   <main id="mainContent">
     <div id="blocksContainer"></div>
-    <div class="add-block-row main" id="mainAddRow" style="opacity:0.3">
+    <!-- ★透明度は style.css で扱う。
+         ここに style="opacity:0.3" と直書きしてあったため、画面幅で
+         切り替える指定が一切効かず、指で使う端末でも薄いままだった
+         （直書きは CSS のどの指定にも勝つ）。 -->
+    <div class="add-block-row main" id="mainAddRow">
       <button id="btnMainAdd" title="ブロックを追加">+ ブロックを追加</button>
     </div>
     <div class="today-section" id="todaySectionMain" style="display:none"></div>
@@ -563,13 +567,13 @@
   <script src="vendor/highlight/vbnet.min.js"></script>
   <script src="vendor/highlight/powershell.min.js"></script>
   <!-- ここから下はオンライン版だけの読み込み（tools/build-online.js が入れる） -->
-  <script src="online/node-shim.js?v=1.2.1-202609221442"></script>
-  <script src="online/persist.js?v=1.2.1-202609221442"></script>
-  <script src="online/load-server.js?v=1.2.1-202609221442"></script>
+  <script src="online/node-shim.js?v=1.2.2-202609221543"></script>
+  <script src="online/persist.js?v=1.2.2-202609221543"></script>
+  <script src="online/load-server.js?v=1.2.2-202609221543"></script>
   <script>window.YARUBEKI_ONLINE_BASE = "engine/";</script>
-  <script src="online/boot.js?v=1.2.1-202609221442"></script>
+  <script src="online/boot.js?v=1.2.2-202609221543"></script>
   <!-- ここまで -->
-  <script src="app.js?v=1.2.1-202609221442"></script>
+  <script src="app.js?v=1.2.2-202609221543"></script>
 <!-- オンライン版（ブラウザで試す版）にだけ差し込まれる部分。
      tools/build-online.js が </body> の直前へそのまま入れる。
 

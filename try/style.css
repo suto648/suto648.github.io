@@ -474,8 +474,15 @@ body.light-mode main {
   border: 1px solid transparent;
   padding: 3px 6px;
 }
-.edit-mode .block:hover {
-  background: rgba(26, 26, 31, 0.5);
+/* ★「かざしたときの見た目」は、かざせる端末だけに当てる。
+     iOS Safari は、かざす見た目を持つ要素を最初に押したとき
+     「かざした状態」だけを当てて、押した扱いにしない。
+     そのため段落を1回押しても編集に入らず、2回押す必要があった（実機で確認）。
+     指で使う端末では、押して入った状態（:focus-within）が同じ役目を果たす。 */
+@media (hover: hover) {
+  .edit-mode .block:hover {
+    background: rgba(26, 26, 31, 0.5);
+  }
 }
 .edit-mode .block:focus-within {
   background: rgba(26, 26, 31, 0.7);
@@ -487,8 +494,10 @@ body.light-mode main {
   border-color: var(--accent-border);
   box-shadow: inset 3px 0 0 var(--accent);
 }
-body.light-mode.edit-mode .block:hover {
-  background: rgba(44, 124, 196, 0.06);
+@media (hover: hover) {
+  body.light-mode.edit-mode .block:hover {
+    background: rgba(44, 124, 196, 0.06);
+  }
 }
 body.light-mode.edit-mode .block:focus-within {
   background: rgba(44, 124, 196, 0.10);
@@ -507,16 +516,27 @@ body.light-mode.edit-mode .block.block-selected {
   gap: 2px;
   z-index: 10;
 }
-.edit-mode .block:hover > .block-controls,
 .edit-mode .block:focus-within > .block-controls,
 .edit-mode .block.block-selected > .block-controls {
   display: flex;
 }
 /* ホバー/フォーカスが子ブロック側にあるときは、親（セクション等）のメニューを出さず
    いまポイントしているブロックのメニューだけを表示する */
-.edit-mode .block:not(.block-selected):has(.block:hover) > .block-controls,
-.edit-mode .block:not(.block-selected):not(:hover):focus-within:has(.block:focus-within) > .block-controls {
-  display: none;
+@media (hover: hover) {
+  .edit-mode .block:not(.block-selected):not(:hover):focus-within:has(.block:focus-within) > .block-controls {
+    display: none;
+  }
+}
+/* 指の端末には :hover が無いので、:not(:hover) を外した形で同じことをする
+   （:not(:hover) を残すと「かざすと当たり方が変わる規則」になってしまう） */
+@media (hover: none) {
+  .edit-mode .block:not(.block-selected):focus-within:has(.block:focus-within) > .block-controls {
+    display: none;
+  }
+}
+@media (hover: hover) {
+  .edit-mode .block:hover > .block-controls { display: flex; }
+  .edit-mode .block:not(.block-selected):has(.block:hover) > .block-controls { display: none; }
 }
 .block-controls button {
   background: var(--bg3);
@@ -534,13 +554,16 @@ body.light-mode.edit-mode .block.block-selected {
   opacity: 0;
   transition: all var(--transition);
 }
-.edit-mode .block:hover > .block-controls button,
+.edit-mode .block:focus-within > .block-controls button,
 .edit-mode .block.block-selected > .block-controls button { opacity: 0.7; }
-.block-controls button:hover {
-  opacity: 1 !important;
-  background: var(--accent);
-  color: var(--bg);
-  border-color: var(--accent);
+@media (hover: hover) {
+  .edit-mode .block:hover > .block-controls button { opacity: 0.7; }
+  .block-controls button:hover {
+    opacity: 1 !important;
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
 }
 .block-controls button.active {
   opacity: 1 !important;
@@ -700,7 +723,9 @@ body.light-mode.edit-mode .block.block-selected {
   transition: background var(--transition);
 }
 .block-table tr:nth-child(even) td { background: var(--bg2); }
-.block-table tr:hover td { background: var(--bg3); }
+@media (hover: hover) {
+  .block-table tr:hover td { background: var(--bg3); }
+}
 .block-table td[contenteditable],
 .block-table th[contenteditable] { outline: none; }
 .block-table td[contenteditable]:focus,
@@ -724,10 +749,12 @@ body.light-mode.edit-mode .block.block-selected {
   cursor: pointer;
   transition: all var(--transition);
 }
-.block-table .table-controls button:hover {
-  background: var(--accent);
-  color: var(--bg);
-  border-color: var(--accent);
+@media (hover: hover) {
+  .block-table .table-controls button:hover {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
 }
 
 /* ═══ BLOCK — IMAGE ═══ */
@@ -758,7 +785,9 @@ body.light-mode.edit-mode .block.block-selected {
 body.light-mode .block-section {
   background: rgba(44, 124, 196, 0.05);
 }
-.block-section:hover { border-left-color: var(--accent-border); }
+@media (hover: hover) {
+  .block-section:hover { border-left-color: var(--accent-border); }
+}
 
 .block-section > .section-header {
   display: flex;
@@ -771,7 +800,9 @@ body.light-mode .block-section {
   border-radius: 0 var(--radius) 0 0;
   transition: background var(--transition);
 }
-.block-section > .section-header:hover { background: var(--bg-hover); }
+@media (hover: hover) {
+  .block-section > .section-header:hover { background: var(--bg-hover); }
+}
 
 .block-section > .section-header .toggle-icon {
   color: var(--fg3);
@@ -813,15 +844,19 @@ body.light-mode .block-section {
   border-radius: 0;
 }
 body.light-mode .block-section.section-small { background: transparent; }
-.block-section.section-small:hover { border-left-color: var(--accent-border); }
+@media (hover: hover) {
+  .block-section.section-small:hover { border-left-color: var(--accent-border); }
+}
 .block-section.section-small > .section-header {
   padding: 3px 10px;
   background: transparent;
   gap: 7px;
   border-radius: 0;
 }
-.block-section.section-small > .section-header:hover {
-  background: color-mix(in srgb, var(--bg3) 55%, transparent);
+@media (hover: hover) {
+  .block-section.section-small > .section-header:hover {
+    background: color-mix(in srgb, var(--bg3) 55%, transparent);
+  }
 }
 .block-section.section-small > .section-header .toggle-icon { font-size: 9px; }
 .block-section.section-small > .section-header .section-title {
@@ -856,8 +891,10 @@ nav .nav-section.nav-section-small > .nav-section-header .nav-section-link {
   mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 70%, transparent 100%);
   transition: opacity 0.2s ease;
 }
-.block-section > .section-preview:hover {
-  opacity: 0.8;
+@media (hover: hover) {
+  .block-section > .section-preview:hover {
+    opacity: 0.8;
+  }
 }
 .block-section.collapsed.has-today-preview > .section-preview {
   display: block;
@@ -898,8 +935,24 @@ nav .nav-section.nav-section-small > .nav-section-header .nav-section-link {
   opacity: 0;
   transition: opacity var(--transition);
 }
-.edit-mode .block-section:hover > .section-body > .add-block-row,
-.edit-mode .add-block-row.main:hover {
+@media (hover: hover) {
+  .edit-mode .block-section:hover > .section-body > .add-block-row,
+  .edit-mode .add-block-row.main:hover {
+    opacity: 1;
+  }
+}
+/* 本文のいちばん下の「+ ブロックを追加」は、ふだんは控えめに出しておく
+   （中のセクションのものは 0＝かざしたときだけ）。 */
+.add-block-row.main { opacity: 0.3; }
+
+/* ★かざせない端末では、これが opacity:0 のまま出てこない＝
+     ブロックを足す口が消える。指で使う端末では常に出しておく。 */
+@media (hover: none) {
+  /* 動きも止める。出す/出さないが無いので、ふわっと出す意味がない。 */
+  .add-block-row,
+  .add-block-row.main { opacity: 1; transition: none; }
+}
+.edit-mode .block-section:focus-within > .section-body > .add-block-row {
   opacity: 1;
 }
 .add-block-row button {
@@ -913,11 +966,13 @@ nav .nav-section.nav-section-small > .nav-section-header .nav-section-link {
   cursor: pointer;
   transition: all var(--transition);
 }
+@media (hover: hover) {
 .add-block-row button:hover {
   background: var(--accent-soft);
   color: var(--accent);
   border-color: var(--accent-border);
   border-style: solid;
+}
 }
 
 /* ═══ INLINE CODE ═══ */
@@ -2722,7 +2777,11 @@ body.view-mode .dropdown-item.edit-only-item { display: none; }
 .project-manage-name {
   font-size: 13.5px; font-weight: 500;
   display: flex; align-items: center; gap: 8px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
+}
+/* 省略するのは名前だけ。印（開いています）は削らない */
+.project-manage-name-text {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
 }
 .project-badge {
   font-size: 10.5px; font-weight: 500; padding: 1px 7px;
@@ -3114,6 +3173,33 @@ body.view-mode .dropdown-item.edit-only-item { display: none; }
   .sticky-note { max-width: min(170px, calc(100vw - 56px)); }
 
   main { padding: 18px 14px 120px; }
+
+  /* ★窓の中身が縁にくっついていた（実機で指摘）。
+     余白を足し、横に並べていたものは縦に積む。 */
+  .settings-panel, .history-panel {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 80px);
+  }
+  /* 720px 以下の指定で左右は 18px になっているが、上下が 28px/22px のまま
+     窓が縦に詰まる。スマホでは上下も詰める（中身が多いので画面を使い切る）。 */
+  .settings-hero { padding: 20px 18px 14px; }
+  .settings-form { padding: 16px 18px 22px; }
+
+  /* 作業ファイルの整理: 名前・印・ボタンを横1列に詰めると、
+     ボタンの字が「名前を変え／る」と折り返し、印も切れる。縦に積む。 */
+  .project-manage-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 13px 14px;
+  }
+  .project-manage-name { flex-wrap: wrap; }
+  .project-manage-actions { justify-content: flex-end; }
+  .project-manage-actions .settings-btn {
+    white-space: nowrap;
+    padding: 10px 14px;
+    flex: 1 1 auto;
+  }
 }
 
 /* 指で押す端末では、当たり判定を大きくする。
