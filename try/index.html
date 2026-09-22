@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>やるべきこと</title>
-  <link rel="stylesheet" href="style.css?v=1.2.2-202609230720">
+  <link rel="stylesheet" href="style.css?v=1.2.2-202609230730">
   <!-- アイコン。用途ごとに要る形が違う:
        ・SVG   … 対応ブラウザのタブ（拡大しても綺麗）
        ・PNG   … アプリモードの窓とタスクバー（SVG は使われない）
@@ -567,13 +567,13 @@
   <script src="vendor/highlight/vbnet.min.js"></script>
   <script src="vendor/highlight/powershell.min.js"></script>
   <!-- ここから下はオンライン版だけの読み込み（tools/build-online.js が入れる） -->
-  <script src="online/node-shim.js?v=1.2.2-202609230720"></script>
-  <script src="online/persist.js?v=1.2.2-202609230720"></script>
-  <script src="online/load-server.js?v=1.2.2-202609230720"></script>
+  <script src="online/node-shim.js?v=1.2.2-202609230730"></script>
+  <script src="online/persist.js?v=1.2.2-202609230730"></script>
+  <script src="online/load-server.js?v=1.2.2-202609230730"></script>
   <script>window.YARUBEKI_ONLINE_BASE = "engine/";</script>
-  <script src="online/boot.js?v=1.2.2-202609230720"></script>
+  <script src="online/boot.js?v=1.2.2-202609230730"></script>
   <!-- ここまで -->
-  <script src="app.js?v=1.2.2-202609230720"></script>
+  <script src="app.js?v=1.2.2-202609230730"></script>
 <!-- オンライン版（ブラウザで試す版）にだけ差し込まれる部分。
      tools/build-online.js が </body> の直前へそのまま入れる。
 
@@ -701,7 +701,8 @@
   function setOpen(open) {
     panel.hidden = !open;
     badge.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (open) showUsage();
+    // 知らせるほうを先に、時間のかかる問い合わせを後に。
+    if (open) { showEvictNotice(); showUsage(); }
   }
   badge.addEventListener('click', () => setOpen(panel.hidden));
   closeBtn.addEventListener('click', () => setOpen(false));
@@ -713,17 +714,15 @@
     return (n / 1024 / 1024).toFixed(1) + ' MB';
   };
 
-  async function showUsage() {
-    const el = document.getElementById('trialUsage');
+  // ★注意書きは、開いた瞬間に出す。
+  //   以前は使用量を取りに行ったあと（await のあと）に出していたため、
+  //   本物の Safari で測ったときに「出ていない」ように見えた。
+  //   そもそも、消えるかもしれないという知らせを、
+  //   使用量の問い合わせが終わるまで待たせる理由が無い。
+  function showEvictNotice() {
     const api = window.YarubekiOnline;
-    if (!api) { el.textContent = ''; return; }
-    const u = await api.usage();
-    el.textContent = u && u.quota
-      ? 'このブラウザでの使用量: ' + fmt(u.used) + ' / 使える目安 ' + fmt(u.quota)
-      : '';   // Safari は使用量を教えてくれない（実測）。無ければ黙って出さない。
-
-    // 保存を守ってほしいと申し込めなかったブラウザ（Safari など）には、
-    // 自動で消えうることと、その避け方を出す。
+    const warn = document.getElementById('trialEvict');
+    if (!api || !warn) return;
     // ★出し分けは「Apple の WebKit かどうか」で決める。
     //
     //   persist() の返り値では見分けられない。実測:
@@ -734,7 +733,6 @@
     //   iPhone / iPad のブラウザは中身が全部 Apple の WebKit なので、
     //   Chrome を名乗っていても navigator.vendor は Apple になる。
     //   ＝消える側をちょうど拾える。
-    const warn = document.getElementById('trialEvict');
     const appleWebKit = navigator.vendor === 'Apple Computer, Inc.' ||
                         typeof window.GestureEvent !== 'undefined';
     const granted = api.persistGranted ? api.persistGranted() : undefined;
@@ -746,6 +744,19 @@
       '共有ボタンから<strong>ホーム画面に追加</strong>しておくと、その対象から外れます。' +
       '大事なものは、ファイルメニューから書き出して手元に置いてください。';
     warn.hidden = false;
+  }
+
+  // 使用量は問い合わせに時間がかかるので、こちらは後から埋める。
+  // Safari は教えてくれない（実測）。無ければ黙って出さない。
+  async function showUsage() {
+    const el = document.getElementById('trialUsage');
+    const api = window.YarubekiOnline;
+    if (!el) return;
+    if (!api) { el.textContent = ''; return; }
+    const u = await api.usage();
+    el.textContent = u && u.quota
+      ? 'このブラウザでの使用量: ' + fmt(u.used) + ' / 使える目安 ' + fmt(u.quota)
+      : '';
   }
 
   // 保存できない環境（プライベートウィンドウ等）は、黙って失敗させない。
