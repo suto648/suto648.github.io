@@ -4836,11 +4836,22 @@ var findBlock = ${findBlock.toString()};
   if (window.ResizeObserver) {
     const ro = new ResizeObserver(() => fitToolbar());
     const tbEl = document.getElementById('toolbar');
-    if (tbEl) ro.observe(tbEl);
+    if (tbEl) {
+      ro.observe(tbEl);
+      // ★器だけを見ていると取りこぼす。
+      //   幅が足りなくなる原因は「器が縮んだ」ときだけではなく、
+      //   「中身が広がった」ときもある（アイコンの字が後から読み込まれて
+      //   ボタンが数px太る）。実際に本番のスマホ幅で、読み込み直後は段8で
+      //   止まり、そのあと中身が 4px 広がって右端の設定が画面の外へ出た。
+      //   中の一つひとつも見張る。
+      for (const child of tbEl.children) ro.observe(child);
+    }
   }
   window.addEventListener('resize', fitToolbar);
   // 字幅が確定してから測る（フォントの読み込みで幅が変わる）
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitToolbar);
+  // 画像やアイコンまで含めて読み終わったところでもう一度
+  window.addEventListener('load', fitToolbar);
   setTimeout(fitToolbar, 0);
 
   // ============================================================
