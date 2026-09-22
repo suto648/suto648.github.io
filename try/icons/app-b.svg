@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="やるべきこと">
+  <rect width="64" height="64" rx="14" fill="#0f1219"/>
+  <path d="M20 14h18l10 10v26a4 4 0 0 1-4 4H20a4 4 0 0 1-4-4V18a4 4 0 0 1 4-4z" fill="#171c25" stroke="#2a3040" stroke-width="2"/>
+  <path d="M38 14v10h10" fill="none" stroke="#2a3040" stroke-width="2"/>
+  <path d="M23 40l5 5 11-13" fill="none" stroke="#6aa6ff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>やるべきこと</title>
+  <link rel="stylesheet" href="style.css?v=1.1.0">
+  <!-- アイコン。用途ごとに要る形が違う:
+       ・SVG   … 対応ブラウザのタブ（拡大しても綺麗）
+       ・PNG   … アプリモードの窓とタスクバー（SVG は使われない）
+       ・ICO   … Windows のショートカット（別途 icons/app.ico）-->
+  <link rel="icon" type="image/svg+xml" href="icons/app-a.svg">
+  <link rel="icon" type="image/png" sizes="256x256" href="icons/app-256.png">
+  <link rel="icon" type="image/png" sizes="128x128" href="icons/app-128.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="icons/app-48.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/app-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/app-16.png">
+  <link rel="apple-touch-icon" href="icons/app-256.png">
+  <link rel="stylesheet" href="vendor/highlight/github-dark-dimmed.min.css">
+  <link rel="stylesheet" href="vendor/tabler/tabler-icons-subset.css">
+</head>
+<body class="edit-mode">
+
+  <!-- Toolbar -->
+  <div class="toolbar" id="toolbar">
+    <span class="title-display" id="titleDisplay">やるべきこと</span>
+    <div class="toolbar-group toolbar-file-group">
+      <button id="btnFileMenu" aria-haspopup="true" aria-expanded="false" title="読み込みと書き出し">
+        <i class="ti ti-file-type-doc"></i> ファイル <span class="menu-caret">▾</span>
+      </button>
+      <!-- ★説明文は常に出さず、かざしたときだけ下の1行に出す。
+           全部を常時出すと、項目より説明の方が場所を取って読めなくなる。
+           ただし作業ファイルの「何ブロック・いつ」は、選ぶために要る情報なので
+           説明ではなく「見出しの右」に残す。 -->
+      <div class="dropdown-menu" id="fileMenu" hidden role="menu">
+        <div class="dropdown-label">作業ファイル</div>
+        <div class="project-list" id="projectList" data-help="押すとその作業ファイルに切り替わります"></div>
+        <button class="dropdown-item edit-only-item" id="miNewProject" role="menuitem"
+                data-help="別のテーマを、履歴ごと分けて書けます">
+          <span class="dropdown-item-title">新しい作業ファイル…</span>
+        </button>
+        <button class="dropdown-item edit-only-item" id="miManageProjects" role="menuitem"
+                data-help="名前を変える・使わなくなったものをしまう">
+          <span class="dropdown-item-title">作業ファイルの整理…</span>
+        </button>
+
+        <div class="dropdown-sep"></div>
+        <div class="dropdown-label">Markdown</div>
+        <button class="dropdown-item edit-only-item" id="miImportMd" role="menuitem"
+                data-help=".md ファイルをブロックに変換して取り込みます">
+          <span class="dropdown-item-title">読み込む…</span>
+        </button>
+        <button class="dropdown-item" id="miExportMd" role="menuitem"
+                data-help="いまの内容を .md ファイルとして保存します">
+          <span class="dropdown-item-title">書き出す</span>
+        </button>
+
+        <div class="dropdown-sep"></div>
+        <div class="dropdown-label">人に渡す</div>
+        <button class="dropdown-item" id="miExportHtml" role="menuitem"
+                data-help="1ファイルで完結。相手はダブルクリックするだけで読めます">
+          <span class="dropdown-item-title">配布用 HTML</span>
+        </button>
+        <button class="dropdown-item" id="miExportHistoryHtml" role="menuitem"
+                data-help="日付の範囲を選び、変更の履歴を1枚にします（履歴 HTML）">
+          <span class="dropdown-item-title">週報にまとめる…</span>
+        </button>
+
+        <!-- かざした項目の説明がここに出る。高さは固定して、出入りで動かさない。 -->
+        <div class="dropdown-hint" id="fileMenuHint" aria-live="polite"></div>
+      </div>
+    </div>
+    <!-- ★ブロックを足す口には名前を付けてある（blocks-1 / blocks-2）。
+         窓を極端に狭くしたときは、ここを畳んで右端の設定を守る。
+         畳んでも困らないのは、本文の「+ ブロックを追加」から
+         見出し・段落・コード・表・セクション・引きだしの全部を足せるため。
+         画像だけは本文の追加口に無いので、最後まで残す。 -->
+    <div class="toolbar-group edit-only blocks-1">
+      <button id="btnAddSection" title="折りたたみセクションを追加">セクション</button>
+      <button id="btnAddHeading" title="見出しを追加">見出し</button>
+      <button id="btnAddParagraph" title="段落を追加">段落</button>
+    </div>
+    <div class="toolbar-group edit-only blocks-2">
+      <button id="btnAddCode" title="コードブロックを追加">Code</button>
+      <button id="btnAddTable" title="テーブルを追加">表</button>
+      <button id="btnAddSmallSection" title="引きだし（小さな折りたたみ・箇条書き向け）を追加">引きだし</button>
+      <button id="btnAddImage" title="画像を追加"><i class="ti ti-photo"></i></button>
+    </div>
+    <div class="toolbar-group edit-only">
+      <button id="btnInlineCode" title="インラインコード (Ctrl+E)"><code>&lt;/&gt;</code></button>
+      <button id="btnBold" title="太字 (Ctrl+B)"><b>B</b></button>
+    </div>
+    <div class="toolbar-group edit-only">
+      <!-- ★元に戻す・やり直しは記号が万国共通なので、字を外してアイコンだけにした。
+           逆に「整理」「引きだし」はこのアプリ独自の概念で、対応する絵が世の中に
+           無い。アイコンだけにすると毎回当てずっぽうになるので字を残す。 -->
+      <!-- ★記号は文字で描く。同梱アイコンに無いものを足すと、
+           外部から読み込まない約束を壊しかねない。↩↪ はどのPCでも出る。 -->
+      <button id="btnUndo" class="icon-only glyph" title="元に戻す (Ctrl+Z)" aria-label="元に戻す" disabled>↩</button>
+      <button id="btnRedo" class="icon-only glyph" title="やり直し (Ctrl+Y)" aria-label="やり直し" disabled>↪</button>
+    </div>
+    <div class="toolbar-group edit-only">
+      <!-- ★字は必ず span で包む。狭いときに隠すのは CSS の display で行う。
+           以前は font-size:0 で消していたが、この方法は環境によっては効かない
+           （実際に効かない Chrome があり、段を上げても幅が縮まなかった）。 -->
+      <button id="btnReorgMode" title="整理モード：ON中の変更は「本日更新」に出ません（整理・移動用）"><i class="ti ti-arrows-shuffle"></i><span class="btn-label"> 整理</span></button>
+    </div>
+    <div class="toolbar-group">
+      <button id="btnHistory" title="履歴ビューア"><i class="ti ti-history"></i><span class="btn-label"> 履歴</span></button>
+    </div>
+    <div class="toolbar-spacer"></div>
+    <span class="save-status edit-only" id="saveStatus"><span class="save-label">保存しました</span></span>
+    <span class="mode-indicator" id="modeIndicator">編集モード</span>
+    <div class="toolbar-group toolbar-actions">
+      <button id="btnToggleMode" title="モード切替"><i class="ti ti-eye"></i><span class="btn-label"> 閲覧</span></button>
+      <!-- 使い方と設定はアイコンだけ。どちらも記号が定着している。 -->
+      <button id="btnGuide" class="toolbar-guide-btn icon-only glyph" title="使い方と、整理のしかた" aria-label="使い方">?</button>
+      <button id="btnSettings" class="toolbar-settings-btn icon-only" title="表示と保存の設定" aria-label="設定"><i class="ti ti-settings"></i></button>
+      <!-- ★「共有」はファイルメニューの「配布用 HTML を書き出す」と同じ動作だった。
+           同じことをする口が2つあると、どちらが正しいのか迷わせる。ここでは出さない。 -->
+      <button id="btnExportHtml" class="toolbar-share-btn" hidden aria-hidden="true" tabindex="-1"></button>
+    </div>
+  </div>
+
+  <!-- 整理モード中のバナー -->
+  <div class="reorg-banner" id="reorgBanner" aria-live="polite">
+    <i class="ti ti-arrows-shuffle"></i>
+    <span>整理モード中 — この間の変更は「本日更新」に出ません。終了すると整理分をベースラインに取り込みます。</span>
+  </div>
+
+  <!-- In-page Search Bar -->
+  <div class="search-bar" id="searchBar" role="search" style="display:none">
+    <i class="ti ti-search search-bar-icon"></i>
+    <input type="text" id="searchInput" placeholder="ページ内を検索（折りたたみ内も）" autocomplete="off" spellcheck="false">
+    <span class="search-count" id="searchCount">0 / 0</span>
+    <div class="search-bar-buttons">
+      <button id="searchPrev" title="前へ (Shift+Enter)" aria-label="前の一致へ"><i class="ti ti-chevron-up"></i></button>
+      <button id="searchNext" title="次へ (Enter)" aria-label="次の一致へ"><i class="ti ti-chevron-down"></i></button>
+      <button id="searchClose" title="閉じる (Esc)" aria-label="検索を閉じる"><i class="ti ti-x"></i></button>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav id="sideNav">
+    <div class="nav-header">
+      <h2>ナビゲーション</h2>
+      <button id="btnNavCollapse" class="nav-collapse-btn" title="ナビゲーションを閉じる" aria-label="ナビゲーションを閉じる"><i class="ti ti-layout-sidebar-left-collapse"></i></button>
+    </div>
+    <ul class="nav-list" id="navList"></ul>
+    <div class="today-section" id="todaySection" style="display:none"></div>
+  </nav>
+
+  <!-- ナビを閉じている間だけ表示される再表示ボタン -->
+  <button id="btnNavReopen" class="nav-reopen-btn" title="ナビゲーションを開く" aria-label="ナビゲーションを開く"><i class="ti ti-layout-sidebar-left-expand"></i></button>
+
+  <!-- Main Content -->
+  <main id="mainContent">
+    <div id="blocksContainer"></div>
+    <div class="add-block-row main" id="mainAddRow" style="opacity:0.3">
+      <button id="btnMainAdd" title="ブロックを追加">+ ブロックを追加</button>
+    </div>
+    <div class="today-section" id="todaySectionMain" style="display:none"></div>
+  </main>
+
+  <!-- History Modal -->
+  <div class="history-overlay" id="historyOverlay">
+    <div class="history-panel" style="position:relative">
+      <button class="close-btn modal-close-btn history-close-btn" id="historyClose" aria-label="履歴ビューアを閉じる"><i class="ti ti-x"></i></button>
+      <h2><i class="ti ti-history"></i> 履歴ビューア</h2>
+      <div class="history-controls">
+        <label>開始:
+          <input type="date" id="historyFrom">
+        </label>
+        <label>終了:
+          <input type="date" id="historyTo">
+        </label>
+        <button id="historyLoad">表示</button>
+        <button id="historyExportMd" title=".mdファイルとしてエクスポート"><i class="ti ti-file-type-doc"></i> .md出力</button>
+        <button id="btnResetTodayBaseline" class="history-reset-btn" title="現在の状態を本日更新の新しい baseline として設定">本日更新をリセット</button>
+      </div>
+      <div class="history-results" id="historyResults"></div>
+    </div>
+  </div>
+
+  <div class="settings-overlay" id="settingsOverlay">
+    <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <button class="close-btn modal-close-btn settings-close-btn" id="settingsClose" aria-label="設定を閉じる"><i class="ti ti-x"></i></button>
+      <div class="settings-hero">
+        <span class="settings-kicker">Phase 2</span>
+        <h2 id="settingsTitle"><i class="ti ti-settings"></i> 表示と保存の設定</h2>
+        <p>ヘッダー表示名、ブラウザタイトル、自動保存間隔、Redo 上限を appConfig としてまとめて管理します。</p>
+      </div>
+      <form class="settings-form" id="settingsForm">
+        <div class="settings-grid">
+          <label class="settings-field">
+            <span class="settings-label">表示名</span>
+            <span class="settings-help">ヘッダー左上に表示します。</span>
+            <input type="text" id="settingsDisplayTitle" maxlength="80" placeholder="やるべきこと">
+          </label>
+          <label class="settings-field">
+            <span class="settings-label">ドキュメントタイトル</span>
+            <span class="settings-help">ブラウザタイトルと配布 HTML のファイル名に使います。変更がなければ表示名と同じになります。</span>
+            <input type="text" id="settingsDocumentTitle" maxlength="120" placeholder="やるべきこと">
+          </label>
+          <label class="settings-field">
+            <span class="settings-label">自動保存間隔</span>
+            <span class="settings-help">分単位で指定します。1 分以上で入力してください。</span>
+            <div class="settings-input-wrap">
+              <input type="number" id="settingsAutosaveMinutes" min="1" max="120" step="1" inputmode="numeric">
+              <span class="settings-suffix">分</span>
+            </div>
+          </label>
+          <label class="settings-field">
+            <span class="settings-label">Redo 上限</span>
+            <span class="settings-help">Undo / Redo 履歴として保持する件数です。</span>
+            <div class="settings-input-wrap">
+              <input type="number" id="settingsRedoLimit" min="10" max="500" step="10" inputmode="numeric">
+              <span class="settings-suffix">件</span>
+            </div>
+          </label>
+          <label class="settings-field">
+            <span class="settings-label">画面のフォント</span>
+            <span class="settings-help">見出し・本文・付箋に使います。選んだ瞬間に画面へ反映されます。</span>
+            <select id="settingsFontUi"></select>
+            <input type="text" id="settingsFontUiCustom" class="settings-font-custom" maxlength="120"
+                   placeholder="例: BIZ UDPGothic" hidden>
+          </label>
+          <label class="settings-field">
+            <span class="settings-label">コードのフォント</span>
+            <span class="settings-help">コードブロックとインラインコードに使う等幅フォントです。</span>
+            <select id="settingsFontCode"></select>
+            <input type="text" id="settingsFontCodeCustom" class="settings-font-custom" maxlength="120"
+                   placeholder="例: Cascadia Mono" hidden>
+          </label>
+          <label class="settings-field">
+            <span class="settings-label">文字の大きさ</span>
+            <span class="settings-help">本文の基準サイズです。12〜22 の範囲で指定します。</span>
+            <div class="settings-input-wrap">
+              <input type="number" id="settingsFontSizeBase" min="12" max="22" step="1" inputmode="numeric">
+              <span class="settings-suffix">px</span>
+            </div>
+          </label>
+        </div>
+        <p class="settings-font-sample" id="settingsFontSample">
+          見本 — このツールで作った資料は、あとから自分で読み返すためのものです。
+          <code>const example = 1;</code>
+        </p>
+        <div class="settings-note">
+          <strong>反映範囲</strong>
+          <span>この設定は現在のドキュメントに保存され、再読込後と配布 HTML にも引き継がれます。</span>
+        </div>
+
+        <!-- 更新のお知らせ。★ここだけはドキュメントではなくこのPCに保存する -->
+        <!-- ★他の設定項目と同じ形にする。
+             .settings-field が枠つきの箱で、中は縦並び。
+             1行目に見出し（ここではチェックと一緒）、2行目に説明。
+             説明を箱の外に出すと、ここだけ作りが違って見える。 -->
+        <div class="settings-group">
+          <label class="settings-field settings-field-check">
+            <span class="settings-label">
+              <input type="checkbox" id="settingsUpdateCheck">
+              新しい版が出たら知らせる
+            </span>
+            <span class="settings-help">
+              起動したときに、作者のページ（suto648.github.io）の版番号だけを見に行きます。
+              書いた内容は送りません。<strong>切っている間は、どこへも通信しません。</strong>
+              この設定はこのパソコンに保存され、ドキュメントには入りません。
+            </span>
+          </label>
+        </div>
+
+        <div class="settings-actions">
+          <button type="button" class="settings-btn secondary" id="settingsCancel">閉じる</button>
+          <button type="submit" class="settings-btn primary" id="settingsSave">保存する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 更新のお知らせを受け取るか、一度だけ聞く。
+       ★全画面のダイアログにしない。
+         起動しただけで作業を止められるのは、聞く内容の重さに見合わない。
+         （自動テストのクリックも全部遮ってしまい、実際にテストが固まった） -->
+  <div class="update-ask" id="updateAskBar" hidden>
+    <span class="update-ask-main">新しい版が出たら、お知らせしますか？</span>
+    <span class="update-ask-sub">
+      起動時に版番号だけを読みます。書いた内容は送りません。
+      「いいえ」ならどこへも通信しません。あとから設定で変えられます。
+    </span>
+    <span class="update-ask-buttons">
+      <button type="button" id="updateAskNo">いいえ</button>
+      <button type="button" id="updateAskYes" class="primary">はい</button>
+    </span>
+  </div>
+
+  <!-- 新しい版があるときに出る一行 -->
+  <div class="update-banner" id="updateBanner" hidden>
+    <span class="update-banner-text" id="updateBannerText"></span>
+    <a class="update-banner-link" id="updateBannerLink" target="_blank" rel="noopener noreferrer">入手する</a>
+    <button type="button" class="update-banner-close" id="updateBannerClose" aria-label="閉じる"><i class="ti ti-x"></i></button>
+  </div>
+
+  <!-- Markdown 取り込みの確認 -->
+  <div class="settings-overlay" id="importOverlay">
+    <div class="settings-panel import-panel" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+      <button class="close-btn modal-close-btn settings-close-btn" id="importClose" aria-label="閉じる"><i class="ti ti-x"></i></button>
+      <div class="settings-hero">
+        <h2 id="importTitle"><i class="ti ti-file-type-doc"></i> Markdown を読み込む</h2>
+        <p id="importFileName">ファイル名</p>
+      </div>
+      <div class="import-summary" id="importSummary"></div>
+      <div class="import-warnings" id="importWarnings" hidden></div>
+      <div class="import-mode">
+        <label><input type="radio" name="importMode" value="append" checked>
+          <span><strong>いまの内容の後ろに足す</strong>（今あるものは消えません）</span></label>
+        <label><input type="radio" name="importMode" value="replace">
+          <span><strong>いまの内容を置き換える</strong>
+            <em>— 今の内容は消えます。取り消す場合は Ctrl+Z で戻せます。</em></span></label>
+      </div>
+      <div class="settings-actions">
+        <button type="button" class="settings-btn secondary" id="importCancel">やめる</button>
+        <button type="button" class="settings-btn primary" id="importConfirm">読み込む</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 使い方と、整理のしかた -->
+  <div class="settings-overlay" id="guideOverlay">
+    <div class="settings-panel guide-panel" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+      <button class="close-btn modal-close-btn settings-close-btn" id="guideClose" aria-label="閉じる"><i class="ti ti-x"></i></button>
+      <div class="settings-hero">
+        <h2 id="guideTitle">使い方</h2>
+        <p id="guideLead">最初に読むのは <strong>1 と 2 だけ</strong>で足ります。残りは必要になったときに開いてください。</p>
+      </div>
+
+      <a class="guide-manual-link" id="guideManualLink" href="guide/" target="_blank" rel="noopener">
+        画面写真つきの詳しい手引きを開く →
+      </a>
+
+      <div class="guide-tabs" role="tablist">
+        <button class="guide-tab is-active" data-tab="start" role="tab">まず使う</button>
+        <button class="guide-tab" data-tab="organize" role="tab">整理のしかた</button>
+        <button class="guide-tab" data-tab="keys" role="tab">キー操作</button>
+      </div>
+
+      <!-- ── まず使う ── -->
+      <div class="guide-body" data-panel="start">
+        <details class="guide-step" open>
+          <summary><span class="guide-num">1</span>書く</summary>
+          <div class="guide-step-body">
+            <p>本文をクリックすればそのまま書けます。保存のボタンはありません（打ち終わって少し経つと自動で保存されます）。</p>
+            <p>ツールバーの「見出し」「段落」「Code」「表」で、書きたいものの形を足します。
+              <strong>Tab</strong> で一段下げ、<strong>Shift+Tab</strong> で戻せます。</p>
+          </div>
+        </details>
+        <details class="guide-step">
+          <summary><span class="guide-num">2</span>畳む — 「セクション」と「引きだし」</summary>
+          <div class="guide-step-body">
+            <p>長くなってきたら <strong>セクション</strong>（大きな折りたたみ）で囲みます。畳んでおけば、
+              開いているものだけが目に入ります。</p>
+            <p><strong>引きだし</strong>は、その中でさらに小さく畳むためのものです。
+              「details」「調べたときのメモ」「あとで読む」のような、<em>いま要らないが捨てたくないもの</em>を入れます。</p>
+          </div>
+        </details>
+        <details class="guide-step">
+          <summary><span class="guide-num">3</span>あとで見返す — 「本日更新」</summary>
+          <div class="guide-step-body">
+            <p>画面のいちばん下に、<strong>その日に書き足した所だけ</strong>が自動で集まります。
+              どこを触ったか思い出せなくても、ここを見れば足りるようになっています。</p>
+            <p>「履歴」を押すと、過去の日付でも同じものが見られます。</p>
+          </div>
+        </details>
+        <details class="guide-step">
+          <summary><span class="guide-num">4</span>並べ替えるときは「整理」を押してから</summary>
+          <div class="guide-step-body">
+            <p>移動や削除だけをしたいときは、ツールバーの <strong>整理</strong> を押してから作業します。
+              その間の変更は「本日更新」に出ません。</p>
+            <p>これを使わずに大掃除をすると、その日の「本日更新」が移動した行で埋まって、
+              <em>本当に書いたこと</em>が見えなくなります。</p>
+          </div>
+        </details>
+        <details class="guide-step">
+          <summary><span class="guide-num">5</span>人に見せる — 「共有」</summary>
+          <div class="guide-step-body">
+            <p><strong>共有</strong>を押すと、HTML が1ファイルだけ出てきます。相手はそれを開くだけで読めます。
+              インターネットに接続していなくても開けますし、どこかへ送信もされません。</p>
+          </div>
+        </details>
+      </div>
+
+      <!-- ── 整理のしかた ── -->
+      <div class="guide-body" data-panel="organize" hidden>
+        <p class="guide-note">
+          ここに書くのは「こう使うと楽です」という一例です。<strong>合わないと思ったら無視してください。</strong>
+          道具のほうを自分に合わせるほうが、続きます。
+        </p>
+
+        <h3 class="guide-h">迷ったら、この3層にする</h3>
+        <ol class="guide-list">
+          <li><strong>いま動いているもの</strong> … 開いたままのセクション。多くても3つまで。</li>
+          <li><strong>止まっているもの</strong> … 畳んだセクション。いつでも開けるので、消さずに畳む。</li>
+          <li><strong>終わったもの</strong> … いちばん下に「済」のセクションを1つ作り、そこへ落とす。</li>
+        </ol>
+        <p>消さずに下へ落としていくのが要点です。<strong>消すと履歴から消え、
+          「あのとき何をやめたか」が分からなくなります。</strong></p>
+
+        <h3 class="guide-h">付箋は「やること」ではなく「戻ってくる場所」に使う</h3>
+        <p>画面の右に貼れる付箋は、押すとその場所へ飛びます。
+          やることリストとして使うと増えすぎて効かなくなるので、
+          <strong>「今週ここに戻ってくる」という数枚</strong>に絞ると長持ちします。</p>
+
+        <h3 class="guide-h">作業ファイルは「別の頭で考えるもの」ごとに分ける</h3>
+        <p>分ける基準は量ではなく<strong>頭の切り替え</strong>です。
+          仕事と趣味、制作と勉強のように、<em>同時に考えたくないもの</em>を分けます。</p>
+        <p>逆に、関係があるなら1つに入れたままにします。分けると、
+          「本日更新」も履歴も別々になり、行き来が面倒になります。</p>
+
+        <h3 class="guide-h">週に一度だけ、「整理」を押して大掃除する</h3>
+        <p>毎日やる必要はありません。週に一度、<strong>整理</strong>を押した状態で、
+          終わったものを下へ落とし、畳めるものを畳みます。
+          このときの移動は「本日更新」に出ないので、その週に書いたことの記録は汚れません。</p>
+
+        <h3 class="guide-h">書くのをやめる日があってよい</h3>
+        <p>何も書かなかった日は、「本日更新」に何も出ないだけです。
+          埋めなければいけない欄はどこにもありません。</p>
+      </div>
+
+      <!-- ── キー操作 ── -->
+      <div class="guide-body" data-panel="keys" hidden>
+        <table class="guide-keys">
+          <tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>このページの中を探す</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>元に戻す</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>やり直す</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>B</kbd></td><td>太字</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>インラインコード（<code>こういう字</code>）</td></tr>
+          <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>一段下げる / 戻す</td></tr>
+          <tr><td>行頭で <kbd>Backspace</kbd></td><td>下げた段を戻す</td></tr>
+        </table>
+        <p class="guide-note">ここに出ていない操作は、ボタンにマウスを乗せると説明が出ます。</p>
+      </div>
+
+      <div class="settings-actions">
+        <label class="guide-dontshow"><input type="checkbox" id="guideDontShow"> 次から自動で開かない</label>
+        <button type="button" class="settings-btn primary" id="guideCloseBtn">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 作業ファイルの整理 -->
+  <div class="settings-overlay" id="projectsOverlay">
+    <div class="settings-panel import-panel" role="dialog" aria-modal="true" aria-labelledby="projectsTitle">
+      <button class="close-btn modal-close-btn settings-close-btn" id="projectsClose" aria-label="閉じる"><i class="ti ti-x"></i></button>
+      <div class="settings-hero">
+        <h2 id="projectsTitle"><i class="ti ti-file-type-doc"></i> 作業ファイルの整理</h2>
+        <p>名前を変えたり、使わなくなったものを片付けたりできます。</p>
+      </div>
+      <div class="project-manage-list" id="projectManageList"></div>
+      <div class="settings-note">
+        <strong>片付けたものはどこへ行くか</strong>
+        <span>消したように見えても、中身は <code>_trash</code> フォルダへ移すだけです。
+          書いたものが押し間違いで永久に消えることはありません。</span>
+      </div>
+      <div class="settings-actions">
+        <button type="button" class="settings-btn secondary" id="projectsCloseBtn">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 履歴を HTML で書き出す -->
+  <div class="settings-overlay" id="historyHtmlOverlay">
+    <div class="settings-panel import-panel" role="dialog" aria-modal="true" aria-labelledby="historyHtmlTitle">
+      <button class="close-btn modal-close-btn settings-close-btn" id="historyHtmlClose" aria-label="閉じる"><i class="ti ti-x"></i></button>
+      <div class="settings-hero">
+        <h2 id="historyHtmlTitle"><i class="ti ti-history"></i> 履歴を HTML で書き出す</h2>
+        <p>選んだ期間の「何が増えて何が減ったか」を、1ファイルの HTML にまとめます。</p>
+      </div>
+      <div class="range-presets" id="historyHtmlPresets">
+        <button type="button" data-range="week">今週（月〜今日）</button>
+        <button type="button" data-range="lastweek">先週（月〜日）</button>
+        <button type="button" data-range="7">直近7日</button>
+        <button type="button" data-range="30">直近30日</button>
+        <button type="button" data-range="all">全期間</button>
+      </div>
+      <div class="settings-grid">
+        <label class="settings-field">
+          <span class="settings-label">開始日</span>
+          <select id="historyHtmlFrom"></select>
+        </label>
+        <label class="settings-field">
+          <span class="settings-label">終了日</span>
+          <select id="historyHtmlTo"></select>
+        </label>
+      </div>
+      <p class="range-hint" id="historyHtmlHint"></p>
+      <div class="settings-note">
+        <strong>読み方</strong>
+        <span>各日付の下に、その日に増えた行（＋）と減った行（−）が並びます。ネット接続なしで読めます。</span>
+      </div>
+      <div class="settings-actions">
+        <button type="button" class="settings-btn secondary" id="historyHtmlCancel">やめる</button>
+        <button type="button" class="settings-btn primary" id="historyHtmlConfirm">書き出す</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="importMdInput" accept=".md,.markdown,.txt,text/markdown" hidden>
+
+  <!-- 付箋を足すボタン。付箋そのものが並ぶ画面右側に置く。
+       ★これが唯一の追加口。ツールバー（画面左上）にも同じボタンがあったが、
+         付箋は右側に並ぶのに追加は左上、という視線の動きが不自然だったので外した。 -->
+  <button class="sticky-add-btn" id="btnAddStickyRight" type="button"
+          title="付箋を追加" aria-label="付箋を追加">
+    <i class="ti ti-note" aria-hidden="true"></i>
+    <span class="sticky-add-plus" aria-hidden="true">+</span>
+  </button>
+
+  <!-- Sticky Notes Container (always visible) -->
+  <div class="sticky-notes-container" id="stickyNotesContainer"></div>
+
+  <!-- Sticky Note Modal -->
+  <div class="sticky-modal-overlay" id="stickyModal" style="display:none">
+    <div class="sticky-modal">
+      <h3><i class="ti ti-note"></i> 付箋を追加</h3>
+      <label>色:
+        <div class="sticky-color-picker" id="stickyColorPicker">
+          <span class="sticky-color-opt selected" data-color="#f7c948" style="background:#f7c948"></span>
+          <span class="sticky-color-opt" data-color="#f06595" style="background:#f06595"></span>
+          <span class="sticky-color-opt" data-color="#51cf66" style="background:#51cf66"></span>
+          <span class="sticky-color-opt" data-color="#339af0" style="background:#339af0"></span>
+          <span class="sticky-color-opt" data-color="#cc5de8" style="background:#cc5de8"></span>
+          <span class="sticky-color-opt" data-color="#ff8a4c" style="background:#ff8a4c"></span>
+        </div>
+      </label>
+      <label>内容:<br><input type="text" id="stickyText" placeholder="付箋のテキスト" maxlength="40"></label>
+      <div class="sticky-modal-actions">
+        <button id="stickyOk">追加</button>
+        <button id="stickyCancel">キャンセル</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="utility-fab-stack" id="utilityFabStack">
+    <button id="btnThemeToggleFab" class="utility-fab" title="ライトモードに切り替え"><i class="ti ti-sun-high"></i></button>
+    <button id="btnScrollTop" class="utility-fab scroll-top-btn" title="ページ上部へ移動"><i class="ti ti-arrow-up"></i></button>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast">✓ 保存しました</div>
+
+  <script src="vendor/highlight/highlight.min.js"></script>
+  <script src="vendor/highlight/sql.min.js"></script>
+  <script src="vendor/highlight/vbnet.min.js"></script>
+  <script src="vendor/highlight/powershell.min.js"></script>
+  <!-- ここから下はオンライン版だけの読み込み（tools/build-online.js が入れる） -->
+  <script src="online/node-shim.js?v=1.1.0"></script>
+  <script src="online/persist.js?v=1.1.0"></script>
+  <script src="online/load-server.js?v=1.1.0"></script>
+  <script>window.YARUBEKI_ONLINE_BASE = "engine/";</script>
+  <script src="online/boot.js?v=1.1.0"></script>
+  <!-- ここまで -->
+  <script src="app.js?v=1.1.0"></script>
+<!-- オンライン版（ブラウザで試す版）にだけ差し込まれる部分。
+     tools/build-online.js が </body> の直前へそのまま入れる。
+
+     ここに書くのは「オンライン版でしか意味を持たないもの」だけ:
+       ・保存がこのブラウザの中にしか無いことの説明
+       ・買うところへの入口
+     アプリ本体（public/）には一切足さない。足すとオフライン版に
+     「ブラウザに保存されます」という嘘の説明が出る。 -->
+<style>
+  /* ★重なり順は 8000 台。画面には 950 までの浮いた部品（画面右下の丸ボタン等）が
+     あり、300 では下に潜って押せなかった。付箋の全画面（9000）より下に置く。 */
+  #trialBadge {
+    position: fixed; right: 14px; bottom: 14px; z-index: 8000;
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 13px; border-radius: 999px;
+    background: var(--bg2, #171c25); color: var(--fg2, #97a1b4);
+    border: 1px solid var(--border, #2a3040);
+    font: 500 12px/1.4 var(--font-ui, 'Segoe UI', 'Yu Gothic UI', sans-serif);
+    cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,.35);
+  }
+  #trialBadge:hover { color: var(--fg, #d7dde8); border-color: var(--accent, #6aa6ff); }
+  #trialBadge .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent, #6aa6ff); flex: 0 0 auto;
+  }
+  #trialPanel {
+    position: fixed; right: 14px; bottom: 58px; z-index: 8001;
+    width: min(360px, calc(100vw - 28px));
+    padding: 18px 18px 16px;
+    border-radius: 12px;
+    background: var(--bg2, #171c25); color: var(--fg, #d7dde8);
+    border: 1px solid var(--border, #2a3040);
+    box-shadow: 0 12px 40px rgba(0,0,0,.5);
+    font: 400 13px/1.75 var(--font-ui, 'Segoe UI', 'Yu Gothic UI', sans-serif);
+  }
+  #trialPanel h2 { font-size: 14px; font-weight: 600; margin: 0 0 10px; }
+  #trialPanel p { margin: 0 0 12px; color: var(--fg2, #97a1b4); }
+  #trialPanel ul { margin: 0 0 14px; padding-left: 1.1em; color: var(--fg2, #97a1b4); }
+  #trialPanel li { margin: 3px 0; }
+  #trialPanel .buy {
+    display: block; text-align: center; text-decoration: none;
+    padding: 10px 12px; margin-bottom: 8px; border-radius: 8px;
+    background: var(--accent, #6aa6ff); color: #0f1219; font-weight: 600;
+  }
+  #trialPanel .buy.sub {
+    background: transparent; color: var(--fg2, #97a1b4);
+    border: 1px solid var(--border, #2a3040); font-weight: 500;
+  }
+  #trialPanel .buy:hover { filter: brightness(1.08); }
+  #trialPanel .meta { font-size: 11.5px; color: var(--fg3, #6b7688); margin: 10px 0 0; }
+  #trialPanel .close {
+    position: absolute; top: 10px; right: 10px;
+    background: none; border: 0; color: var(--fg3, #6b7688);
+    font-size: 16px; line-height: 1; cursor: pointer; padding: 4px;
+  }
+  #trialWarn {
+    margin: 0 0 12px; padding: 9px 11px; border-radius: 7px;
+    background: rgba(255,170,60,.10); border: 1px solid rgba(255,170,60,.35);
+    color: #e8c07a; font-size: 12px; line-height: 1.7;
+  }
+</style>
+
+<button id="trialBadge" type="button" aria-haspopup="dialog" aria-expanded="false">
+  <span class="dot" aria-hidden="true"></span>
+  <span>ブラウザで試しています</span>
+</button>
+
+<div id="trialPanel" role="dialog" aria-label="お試し版について" hidden>
+  <button class="close" type="button" aria-label="閉じる">×</button>
+  <h2>これは「ブラウザで試す版」です</h2>
+  <div id="trialWarn" hidden></div>
+  <p>
+    書いたものは、いま使っているこのブラウザの中だけに残ります。
+    機能は製品版とまったく同じものが動いています（同じプログラムです）。
+  </p>
+  <ul>
+    <li>別のPCや別のブラウザからは開けません</li>
+    <li>閲覧データを消すと、書いたものも消えます</li>
+    <li>自動のバックアップはありません</li>
+  </ul>
+  <p>
+    ずっと使うなら、PCに入れる版をどうぞ。保存先が自分のPCのフォルダになり、
+    ファイルとして残ります。
+  </p>
+  <a class="buy" href="https://nkyo-p.booth.pm/items/8870175" target="_blank" rel="noopener">
+    BOOTH で買う（¥1,500）
+  </a>
+  <a class="buy sub" href="https://nkyo-p.itch.io/yarubeki-editor" target="_blank" rel="noopener">
+    itch.io で買う（$12）
+  </a>
+  <a class="buy sub" href="https://suto648.github.io/" target="_blank" rel="noopener">
+    先に説明を読む
+  </a>
+  <p class="meta" id="trialUsage"></p>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const badge = document.getElementById('trialBadge');
+  const panel = document.getElementById('trialPanel');
+  const closeBtn = panel.querySelector('.close');
+
+  function setOpen(open) {
+    panel.hidden = !open;
+    badge.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) showUsage();
+  }
+  badge.addEventListener('click', () => setOpen(panel.hidden));
+  closeBtn.addEventListener('click', () => setOpen(false));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false); });
+
+  const fmt = (n) => {
+    if (!(n >= 0)) return '?';
+    if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB';
+    return (n / 1024 / 1024).toFixed(1) + ' MB';
+  };
+
+  async function showUsage() {
+    const el = document.getElementById('trialUsage');
+    const api = window.YarubekiOnline;
+    if (!api) { el.textContent = ''; return; }
+    const u = await api.usage();
+    el.textContent = u && u.quota
+      ? 'このブラウザでの使用量: ' + fmt(u.used) + ' / 使える目安 ' + fmt(u.quota)
+      : '';
+  }
+
+  // 保存できない環境（プライベートウィンドウ等）は、黙って失敗させない。
+  // 書いたものが消えるのは、この製品でいちばん避けたいこと。
+  function checkProblem() {
+    const api = window.YarubekiOnline;
+    const msg = api && api.problem && api.problem();
+    if (!msg) return;
+    const warn = document.getElementById('trialWarn');
+    warn.textContent = msg;
+    warn.hidden = false;
+    badge.querySelector('span:last-child').textContent = '保存できていません';
+    badge.style.borderColor = 'rgba(255,170,60,.55)';
+    badge.style.color = '#e8c07a';
+  }
+  setInterval(checkProblem, 3000);
+  setTimeout(checkProblem, 800);
+})();
+</script>
+
+</body>
+</html>
