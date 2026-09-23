@@ -74,8 +74,10 @@ ready = (async function start() {
     persist = global.OnlinePersist.createPersist();
     const rows = await persist.boot();
 
+    // 第2引数は画面のファイル（style.css など）の置き場所。
+    // 配布用 HTML を作るとき、server.js がこれらをファイルとして読む。
     const sources = await global.LoadServer.fetchSources(
-      (global.YARUBEKI_ONLINE_BASE || './engine/'));
+      (global.YARUBEKI_ONLINE_BASE || './engine/'), './');
 
     engine = global.LoadServer.create(sources, {
       env: { MD_EDITOR_DATA: '/data', MD_EDITOR_EMBEDDED: '1' },

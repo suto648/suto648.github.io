@@ -383,6 +383,39 @@ function parseSaveRequestBody(body) {
   };
 }
 
+// HTML の書き方を、素の文字へ戻す。
+//
+// ★本文は HTML として持っている（「&」は &amp;、「<」は &lt; として入る）。
+//   Markdown は素のテキストなので、書き出すときは戻さないといけない。
+//   戻していなかったため:
+//     ・書き出した .md を他のエディタで開くと「&amp;」と見えた
+//     ・それを読み込み直すと、また逃がされて「&amp;amp;」になり、
+//       **往復するたびに増えていった**（利用者の文章が静かに壊れる）
+//
+//   順番に意味がある。&amp; を最後に戻すこと。
+//   先に戻すと「&amp;lt;」が「<」になり、元が「&lt;」だったのか
+//   「&amp;lt;」だったのか区別が付かなくなる。
+// 日付として受け取ってよい形か（YYYYMMDD だけ）。
+//
+// ★これを見ていなかったため、日付のつもりの文字列がそのままファイルの場所に
+//   組み込まれ、「../」を混ぜると**データ置き場の外にある .json が読めた**。
+//   実際に、置き場の外へ置いた秘密のファイルを読み出せることを確かめた。
+//   同じPCでこの口を直接叩ける相手に限られるとはいえ、
+//   「自分のPCの中だけ」と説明している製品で外を読めるのは筋が通らない。
+function isDateParam(s) {
+  return typeof s === 'string' && /^\d{8}$/.test(s);
+}
+
+function unescapeHtmlEntities(text) {
+  return String(text == null ? '' : text)
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;|&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
 function escapeHtmlServer(text) {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -565,6 +598,20 @@ app.get('/api/content', (req, res) => {
 app.put('/api/content', (req, res) => {
   ensureDirs();
 
+  // ★blocks が配列でないまま受け取ると、中では [] として扱われ、
+  //   **文書が空になったのに「保存しました」と返していた**。
+  //   書いたものが消えたことに、利用者は気づけない。
+  //   既にある「日本語が大幅に減ったら拒否する」検査は、
+  //   元の文書に日本語が50字以上あるときしか働かないので、ここでも止める。
+  const rawForCheck = (req.body && typeof req.body === 'object' && req.body.content &&
+    typeof req.body.content === 'object') ? req.body.content : req.body;
+  if (rawForCheck && typeof rawForCheck === 'object' &&
+      'blocks' in rawForCheck && !Array.isArray(rawForCheck.blocks)) {
+    return res.status(400).json({
+      error: '本文の形が違います（blocks は配列である必要があります）。保存しませんでした。'
+    });
+  }
+
   const parsed = parseSaveRequestBody(req.body);
   const contentMigration = migrateLegacySingleTrailingBrArtifacts(parsed.content);
   const undoMigration = parsed.undoSnapshot
@@ -690,6 +737,10 @@ app.get('/api/snapshots', (req, res) => {
 
 // Get specific snapshot
 app.get('/api/snapshot/:date', (req, res) => {
+  // ★日付の形だけを通す。素通しにすると「../」で置き場の外が読める（実測済み）。
+  if (!isDateParam(req.params.date)) {
+    return res.status(400).json({ error: '日付は YYYYMMDD の形で指定してください' });
+  }
   const filePath = path.join(SNAPSHOT_DIR, `${req.params.date}.json`);
   const data = readJSON(filePath);
   if (!data) return res.status(404).json({ error: 'Snapshot not found' });
@@ -714,6 +765,10 @@ app.get('/api/today-diff', (req, res) => {
 app.get('/api/diff', (req, res) => {
   const { from, to } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'from and to required' });
+  // 日付の形だけを通す（素通しにすると置き場の外を指せる）
+  if (!isDateParam(from) || !isDateParam(to)) {
+    return res.status(400).json({ error: '日付は YYYYMMDD の形で指定してください' });
+  }
 
   const fromFile = path.join(SNAPSHOT_DIR, `${from}.json`);
   const toFile = path.join(SNAPSHOT_DIR, `${to}.json`);
@@ -731,6 +786,10 @@ app.get('/api/diff', (req, res) => {
 app.get('/api/range-diff', (req, res) => {
   const { from, to } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'from and to required' });
+  // 日付の形だけを通す（素通しにすると置き場の外を指せる）
+  if (!isDateParam(from) || !isDateParam(to)) {
+    return res.status(400).json({ error: '日付は YYYYMMDD の形で指定してください' });
+  }
 
   ensureDirs();
   const files = fs.readdirSync(SNAPSHOT_DIR)
@@ -792,12 +851,17 @@ app.get('/api/export-md', (req, res) => {
     for (const b of blocks) {
       if (b.type === 'heading') {
         const prefix = b.level === 2 ? '#####\u3000' : '##### ';
-        const text = (b.text || '').replace(/<code>/g, '`').replace(/<\/code>/g, '`').replace(/<[^>]+>/g, '');
+        // ★タグを外してから、実体参照を素の文字へ戻す。順番が逆だと、
+        //   利用者が書いた「&lt;b&gt;」がタグになって消える。
+        const text = unescapeHtmlEntities(
+          (b.text || '').replace(/<code>/g, '`').replace(/<\/code>/g, '`').replace(/<[^>]+>/g, ''));
         lines.push(prefix + text);
         lines.push('');
       } else if (b.type === 'paragraph') {
         const indent = '&#x09;'.repeat(b.indent || 0);
-        const text = (b.text || '').replace(/<code>/g, '`').replace(/<\/code>/g, '`').replace(/<br>/g, '\n' + indent).replace(/<[^>]+>/g, '');
+        const text = unescapeHtmlEntities(
+          (b.text || '').replace(/<code>/g, '`').replace(/<\/code>/g, '`')
+            .replace(/<br>/g, '\n' + indent).replace(/<[^>]+>/g, ''));
         lines.push(indent + text);
         lines.push('');
       } else if (b.type === 'code') {
@@ -807,15 +871,15 @@ app.get('/api/export-md', (req, res) => {
         lines.push('');
       } else if (b.type === 'table') {
         if (b.headers && b.headers.length) {
-          lines.push('| ' + b.headers.join(' | ') + ' |');
+          lines.push('| ' + b.headers.map(h => unescapeHtmlEntities(h)).join(' | ') + ' |');
           lines.push('| ' + b.headers.map(() => '---').join(' | ') + ' |');
           (b.rows || []).forEach(row => {
-            lines.push('| ' + row.map(c => (c || '').replace(/<[^>]+>/g, '')).join(' | ') + ' |');
+            lines.push('| ' + row.map(c => unescapeHtmlEntities((c || '').replace(/<[^>]+>/g, ''))).join(' | ') + ' |');
           });
           lines.push('');
         }
       } else if (b.type === 'section') {
-        lines.push('[[ ' + (b.title || '') + ' ]]');
+        lines.push('[[ ' + unescapeHtmlEntities(b.title || '') + ' ]]');
         lines.push(...blocksToMd(b.children || [], depth + 1));
         lines.push('[[/]]');
         lines.push('');
@@ -1125,6 +1189,10 @@ app.get('/api/legacy-today', (req, res) => {
 app.get('/api/legacy-diff', (req, res) => {
   const { from, to } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'from and to required' });
+  // 日付の形だけを通す（素通しにすると置き場の外を指せる）
+  if (!isDateParam(from) || !isDateParam(to)) {
+    return res.status(400).json({ error: '日付は YYYYMMDD の形で指定してください' });
+  }
 
   const oldLines = snapshotLinesFor(from);
   const newLines = snapshotLinesFor(to);
@@ -1152,6 +1220,10 @@ app.get('/api/legacy-diff', (req, res) => {
 app.get('/api/legacy-range', (req, res) => {
   const { from, to } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'from and to required' });
+  // 日付の形だけを通す（素通しにすると置き場の外を指せる）
+  if (!isDateParam(from) || !isDateParam(to)) {
+    return res.status(400).json({ error: '日付は YYYYMMDD の形で指定してください' });
+  }
 
   const files = listSnapshotDates();
   if (!files.length) return res.json({ days: [] });
@@ -1282,9 +1354,9 @@ function pushFormattedDiff(output, diff, dateLabel, content) {
 
     output.push('');
     if (dateLabel) {
-      output.push(`### ${dateLabel}　${label} (${contentCount} lines)`);
+      output.push(`### ${dateLabel}　${unescapeHtmlEntities(label)} (${contentCount} lines)`);
     } else {
-      output.push(`### ${label} (${contentCount} lines)`);
+      output.push(`### ${unescapeHtmlEntities(label)} (${contentCount} lines)`);
     }
     output.push('');
 
@@ -1301,10 +1373,12 @@ function pushFormattedDiff(output, diff, dateLabel, content) {
         continue;
       }
       if (inCode) {
+        // ★コードの中はそのまま出す。素の文字なので、戻すと壊れる
+        //   （利用者がコードに「&amp;」と書いていたら、それは「&amp;」のまま）。
         output.push(item);
       } else {
         const img = renderImageItemForMd(item, content);
-        output.push(`- ${img !== null ? img : item}`);
+        output.push(`- ${img !== null ? img : unescapeHtmlEntities(item)}`);
       }
     }
     // Ensure code fence is closed
@@ -1323,9 +1397,9 @@ function pushFormattedGroups(output, groups, dateLabel, content) {
 
     output.push('');
     if (dateLabel) {
-      output.push(`### ${dateLabel}　${group.key} (${contentCount} lines)`);
+      output.push(`### ${dateLabel}　${unescapeHtmlEntities(group.key)} (${contentCount} lines)`);
     } else {
-      output.push(`### ${group.key} (${contentCount} lines)`);
+      output.push(`### ${unescapeHtmlEntities(group.key)} (${contentCount} lines)`);
     }
     output.push('');
 
@@ -1342,10 +1416,10 @@ function pushFormattedGroups(output, groups, dateLabel, content) {
         continue;
       }
       if (inCode) {
-        output.push(item);
+        output.push(item);   // コードの中はそのまま（上の注記と同じ理由）
       } else {
         const img = renderImageItemForMd(item, content);
-        output.push(`- ${img !== null ? img : item}`);
+        output.push(`- ${img !== null ? img : unescapeHtmlEntities(item)}`);
       }
     }
     if (inCode) output.push('```');
@@ -1544,7 +1618,13 @@ app.get('/api/export-history-html', (req, res) => {
 });
 
 // Export as self-contained HTML (for distribution)
-app.get('/api/export-html', async (req, res) => {
+// ★async を外した。中に await は1つも無く、付いているだけだった。
+//   Express 4 は async なハンドラの中で投げられた例外を拾えないため、
+//   中身が壊れていると**アプリそのものが終了していた**（終了コード1）。
+//   利用者からは「窓は開いているのに、もう何も保存できない」に見える。
+//   同じ壊れた中身でも、同期で書かれた /api/export-md は 500 で済んでいた。
+//   分かれ目は中身ではなく、ハンドラの書き方だった。
+app.get('/api/export-html', (req, res) => {
   ensureDirs();
   const content = readJSON(CONTENT_FILE);
   if (!content) return res.status(404).json({ error: 'No content' });
@@ -1990,6 +2070,15 @@ function shutdown() {
 }
 
 if (!EMBEDDED) {
+  // ★受け皿が無いと、どこか1か所の取りこぼしでアプリごと終了する。
+  //   これは文章を書いている最中の道具なので、黙って死ぬのがいちばん困る
+  //   （窓は開いたまま、保存だけが効かなくなる）。
+  //   握りつぶさずに記録は残し、動き続けることを選ぶ。
+  process.on('unhandledRejection', (reason) => {
+    console.error('[warn] 拾えなかった失敗がありました（動作は続けます）:',
+      reason && reason.stack ? reason.stack : reason);
+  });
+
   cleanupOldLockFiles();
   writePresence();
   presenceTimer = setInterval(writePresence, PRESENCE_HEARTBEAT_MS);

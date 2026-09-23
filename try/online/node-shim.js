@@ -92,9 +92,16 @@ function createFs(options) {
   const files = new Map();
   const dirs = new Set(['/']);
 
+  // ★途中で止めてはいけない。
+  //   以前は「既にあるフォルダ」に当たった時点で打ち切っていた。
+  //   mkdirSync('/a/b/c') が c を登録してから addDirs('/a/b/c/x') を呼ぶと、
+  //   1つ目の /a/b/c で「もうある」と判断して**親の /a/b と /a を登録しなかった**。
+  //   その結果、作業ファイルを片付けるとき「フォルダが無い」と見なされ、
+  //   退避されずに中身が置き去りになった（オンライン版で実際に起きた）。
+  //   Set なので重複は害が無い。最後まで遡る。
   function addDirs(file) {
     let d = pathShim.dirname(file);
-    while (d && d !== '/' && !dirs.has(d)) { dirs.add(d); d = pathShim.dirname(d); }
+    while (d && d !== '/' && d !== '.') { dirs.add(d); d = pathShim.dirname(d); }
   }
 
   const fs = {

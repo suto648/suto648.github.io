@@ -25,8 +25,27 @@ const SERVER_FILE = 'server.js';
 // 更新のお知らせが常に「新しい版があります」になる。
 const PACKAGE_FILE = 'package.json';
 
-async function fetchSources(baseUrl) {
+// ★「配布用 HTML」を作るとき、server.js はこれらを**ファイルとして読む**。
+//   1ファイルで完結させるために、中身を全部埋め込む作りだから。
+//   オンライン版で置いていなかったため、配布用 HTML が 500 で落ちていた
+//   （「人に渡す」は看板の機能なのに、オンライン版では使えなかった）。
+//   画面が既に読み込んでいるものと同じなので、取り直しても実質ただ。
+const PAGE_FILES = [
+  'style.css',
+  'vendor/highlight/github-dark-dimmed.min.css',
+  'vendor/highlight/highlight.min.js',
+  'vendor/highlight/sql.min.js',
+  'vendor/highlight/vbnet.min.js',
+  'vendor/highlight/powershell.min.js',
+];
+
+/**
+ * @param {string} baseUrl  engine/（server.js と lib）の場所
+ * @param {string} pageBase 画面のファイル（style.css など）の場所
+ */
+async function fetchSources(baseUrl, pageBase) {
   const base = String(baseUrl || './').replace(/\/?$/, '/');
+  const pbase = String(pageBase == null ? './' : pageBase).replace(/\/?$/, '/');
   const out = {};
   const wanted = LIB_ORDER.map(l => l.file).concat([SERVER_FILE, PACKAGE_FILE]);
   await Promise.all(wanted.map(async (rel) => {
@@ -34,21 +53,34 @@ async function fetchSources(baseUrl) {
     if (!res.ok) throw new Error('読み込めません: ' + rel + '（' + res.status + '）');
     out[rel] = await res.text();
   }));
+  // 画面のファイルは、読めなくても本体は動かす（配布用 HTML だけが困る）。
+  await Promise.all(PAGE_FILES.map(async (rel) => {
+    try {
+      const res = await fetch(pbase + rel, { cache: 'no-cache' });
+      if (res.ok) out['public/' + rel] = await res.text();
+    } catch (_) { /* 取れなければ置かない */ }
+  }));
   return out;
 }
 
 // CommonJS の1ファイルを、与えた道具立てのもとで評価する。
+//
+// ★Date も渡している。ふだんは本物の Date をそのまま渡すので何も変わらない。
+//   渡し替えられるようにしてあるのは、**日をまたぐ動きを試すため**。
+//   この製品の値打ちは「何日ぶんかの履歴が1枚の週報になる」ことなのに、
+//   実際の日付でしか動かせないと、1日ぶんしか確かめられない。
+//   server.js 側には試験用の分岐を一切入れない（分岐は必ずずれていく）。
 function evalModule(source, fileName, env) {
   const module = { exports: {} };
   const fn = new Function(
     'require', 'module', 'exports', '__dirname', '__filename',
     'process', 'Buffer', 'console', 'setInterval', 'clearInterval',
-    'setTimeout', 'clearTimeout', 'URL', 'self',
+    'setTimeout', 'clearTimeout', 'URL', 'self', 'Date',
     source + '\n//# sourceURL=' + fileName
   );
   fn(env.require, module, module.exports, '/app', '/app/' + fileName,
      env.process, env.Buffer, console, env.setInterval, env.clearInterval,
-     env.setTimeout, env.clearTimeout, URL, undefined);
+     env.setTimeout, env.clearTimeout, URL, undefined, env.Date || Date);
   return module.exports;
 }
 
@@ -74,6 +106,8 @@ function create(sources, options) {
     require: node.require,
     process: node.process,
     Buffer: node.Buffer,
+    // ふだんは本物の Date。日をまたぐ試験のときだけ差し替える。
+    Date: opts.clock || Date,
     setInterval: wrapInterval,
     clearInterval: global.clearInterval.bind(global),
     setTimeout: global.setTimeout.bind(global),
@@ -88,6 +122,11 @@ function create(sources, options) {
   // package.json は「読まれるファイル」なので、置き場所へ置いておく。
   if (sources[PACKAGE_FILE] != null) {
     node.fs.writeFileSync('/app/' + PACKAGE_FILE, sources[PACKAGE_FILE]);
+  }
+  // 画面のファイルも同じ場所へ置く（配布用 HTML がこれを読む）。
+  for (const rel of PAGE_FILES) {
+    const body = sources['public/' + rel];
+    if (body != null) node.fs.writeFileSync('/app/public/' + rel, body);
   }
 
   // lib を先に評価して、require で引けるように登録する
@@ -111,6 +150,6 @@ function create(sources, options) {
   return { app: exported.app, fs: node.fs, process: node.process };
 }
 
-global.LoadServer = { fetchSources, create, LIB_ORDER, SERVER_FILE };
+global.LoadServer = { fetchSources, create, LIB_ORDER, SERVER_FILE, PAGE_FILES };
 
 })(typeof self !== 'undefined' ? self : this);
