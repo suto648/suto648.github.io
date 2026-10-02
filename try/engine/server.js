@@ -1238,6 +1238,12 @@ app.get('/api/legacy-range', (req, res) => {
     if (f <= to) toDate = f;
     if (nextAfterTo === null && f > to) nextAfterTo = f;
   }
+  // If every snapshot postdates `from` (e.g. the UI's default "7 days ago"
+  // for someone who only started using the app 2 days ago), baseDate stays
+  // null and this used to report "no snapshots in range" even though every
+  // snapshot the user has *is* in range — just none of them is <= from.
+  // Treat "nothing at/before from" as "start from the earliest we have".
+  if (baseDate === null && files.length) baseDate = files[0];
   // Use nextAfterTo as diff endpoint so that work done on the To date is included
   const endDate = nextAfterTo || toDate;
   if (!baseDate || !endDate || baseDate === endDate) {

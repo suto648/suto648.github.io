@@ -6301,12 +6301,21 @@ var findBlock = ${findBlock.toString()};
     $('#historyOverlay').classList.add('show');
     loadLegacySnapshots().then(snapshots => {
       if (snapshots.length > 0) {
+        const first = snapshots[0];
         const last = snapshots[snapshots.length - 1];
-        // Default end = latest snapshot; default start = 7 days before today
+        // Default end = latest snapshot; default start = 7 days before today,
+        // but never earlier than the first snapshot that actually exists —
+        // otherwise someone who started less than a week ago gets a "from"
+        // date with nothing on or before it, and used to see an empty
+        // history view by default (the server-side range query required a
+        // snapshot at/before `from`; fixed there too, but the date shown in
+        // the picker should be honest regardless).
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
         const pad = n => String(n).padStart(2, '0');
-        const fromDefault = `${oneWeekAgo.getFullYear()}-${pad(oneWeekAgo.getMonth() + 1)}-${pad(oneWeekAgo.getDate())}`;
+        const oneWeekAgoStr = `${oneWeekAgo.getFullYear()}${pad(oneWeekAgo.getMonth() + 1)}${pad(oneWeekAgo.getDate())}`;
+        const fromDateStr = first > oneWeekAgoStr ? first : oneWeekAgoStr;
+        const fromDefault = `${fromDateStr.slice(0,4)}-${fromDateStr.slice(4,6)}-${fromDateStr.slice(6,8)}`;
         // Only set if not already populated by the user
         if (!$('#historyFrom').value) $('#historyFrom').value = fromDefault;
         if (!$('#historyTo').value) $('#historyTo').value = `${last.slice(0,4)}-${last.slice(4,6)}-${last.slice(6,8)}`;
