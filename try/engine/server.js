@@ -113,6 +113,8 @@ app.post('/api/projects/:id/open', (req, res) => {
   const r = projectStore.open(req.params.id);
   if (!r.ok) return res.status(r.status).json({ error: r.error });
   applyProjectPaths(r.id);
+  // ★切り替えた先の「元に戻す」で、前の作業ファイルの内容を書き込まないようにする。
+  clearUndoRedoForProjectSwitch();
   ensureDirs();
   res.json({ ok: true, id: r.id, ...projectStore.list() });
 });
@@ -122,6 +124,8 @@ app.delete('/api/projects/:id', (req, res) => {
   if (!r.ok) return res.status(r.status).json({ error: r.error });
   if (currentProjectId === req.params.id) {
     applyProjectPaths(r.nextId);
+    // ★削除で切り替わった先でも、前の作業ファイルの内容を持ち越さない。
+    clearUndoRedoForProjectSwitch();
     ensureDirs();
   }
   res.json(r);
@@ -445,6 +449,22 @@ function pushHistoryEntry(stack, contentObj) {
 function pushUndo(contentObj) {
   pushHistoryEntry(undoStack, contentObj);
   redoStack.length = 0; // clear redo on new edit
+}
+
+// ★undoStack / redoStack はプロセス全体で1つ（作業ファイルごとに分かれていない）。
+//   作業ファイルを切り替えたときにここを呼ばないと、
+//   「別の作業ファイルで保存する前の状態」が、いま開いている作業ファイルの
+//   「元に戻す」で呼び出され、**その内容が今の作業ファイルの content.json へ
+//   そのまま書き込まれる**。切り替えた直後、一度も編集していない作業ファイルで
+//   「元に戻す」を押しただけで再現する（実測で確認済み）。
+//   この製品は「仕事ごとに作業ファイルを分けると、別の案件の記録が混ざらない」
+//   ことを売りにしているので、これは見過ごせない。
+//   直し方は「切り替えたら、積んである履歴ごと捨てる」。元々このスタックは
+//   サーバを再起動すれば消える一時的なものなので、切り替えで消えても
+//   既存の約束を壊さない。
+function clearUndoRedoForProjectSwitch() {
+  undoStack.length = 0;
+  redoStack.length = 0;
 }
 
 
