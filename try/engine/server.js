@@ -1146,7 +1146,12 @@ app.post('/api/reorg-mode', (req, res) => {
 
 app.get('/api/reorg-mode', (req, res) => {
   const s = readReorgState();
-  res.json({ active: !!(s.active && s.date === today()), date: s.date || null });
+  // ★整理モードは「ONにした日」限定で効く（isReorgActiveFor参照）。
+  //   ONのまま日をまたぐと、画面のボタンは「整理中」のままなのに、
+  //   翌日からは実際には何も隠さなくなる（本人は気づけない）。
+  //   autoExpired はその「サーバ側ではもう切れている」状態を画面に伝えるための印。
+  const autoExpired = !!(s.active && s.date && s.date !== today());
+  res.json({ active: !!(s.active && s.date === today()), date: s.date || null, autoExpired });
 });
 
 

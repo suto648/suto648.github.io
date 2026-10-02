@@ -2516,8 +2516,27 @@ var findBlock = ${findBlock.toString()};
     syncWatchTimerId = setInterval(checkForExternalChanges, 5000);
   }
 
+  // ★整理モードは「ONにした日」限定で効く（server.js 側）。日をまたいでも
+  //   ボタンは「整理中」の見た目のまま変わらないため、本人は気づけないまま
+  //   実際にはもう何も隠されていない状態で編集を続けてしまう。
+  //   既存の5秒ごとの監視に相乗りして、サーバ側で切れていたら画面も追従させる。
+  async function checkReorgExpiry() {
+    if (!reorgModeActive) return;
+    try {
+      const res = await fetch('/api/reorg-mode');
+      const data = await res.json();
+      if (data && data.autoExpired) {
+        reorgModeActive = false;
+        updateReorgModeUI();
+        await refreshTodaySections();
+        showToast('整理モードは日付が変わったため自動的に終わりました。続きはもう一度「整理」を押してください。', 4000);
+      }
+    } catch (_) { /* 次の監視サイクルに任せる */ }
+  }
+
   async function checkForExternalChanges() {
     if (saveInFlight) return;
+    await checkReorgExpiry();
     if (Date.now() - lastLocalSaveAt < 4000) return;   // 自分の保存直後は誤検知を避ける
     const st = await fetchSyncStatus();
     if (!st) return;
