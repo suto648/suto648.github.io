@@ -227,6 +227,7 @@ function scanForConflicts() {
       /^reorg-state\.json(\.(bak|tmp))?$/,
       /^presence-.+\.json$/,
       /^images$/,
+      KEPT_FILE_RE,   // 保存の守りが残した .md（下の keepRejectedContent など）
     ] },
   ];
   const suspicious = [];
@@ -293,6 +294,35 @@ function createDefaultAppConfig(baseTitle) {
     autosaveIntervalMs: DEFAULT_AUTOSAVE_INTERVAL_MS,
     redoLimit: DEFAULT_REDO_LIMIT
   };
+}
+
+// 保存の安全装置が数える「本文の字」。blocks と付箋の中の文字列だけを見る。
+// 数えないもの: id・type などの機械の値、画像の src（data: URI は何万字にもなる）、
+// 日付、設定。HTML のタグと文字参照（&nbsp; など）は外し、空白も数えない。
+const MEASURE_SKIP_KEYS = new Set(['id', 'type', 'src', 'language', 'color', 'addedDate',
+  'level', 'indent', 'collapsed', 'createdAt', 'updatedAt', 'lastModified']);
+function measureContentText(content) {
+  const out = { chars: 0, japanese: 0, replacement: 0 };
+  const visit = (v, key) => {
+    if (typeof v === 'string') {
+      if (MEASURE_SKIP_KEYS.has(key) || v.startsWith('data:')) return;
+      const text = v.replace(/<[^>]*>/g, '').replace(/&[a-zA-Z#0-9]+;/g, ' ');
+      out.chars += (text.match(/\S/gu) || []).length;
+      out.japanese += (text.match(/[\u3000-\u9fff\uff00-\uffef]/g) || []).length;
+      out.replacement += (text.match(/[?\ufffd]/g) || []).length;
+    } else if (Array.isArray(v)) {
+      v.forEach(x => visit(x, key));
+    } else if (v && typeof v === 'object') {
+      for (const k of Object.keys(v)) {
+        if (MEASURE_SKIP_KEYS.has(k)) continue;
+        visit(v[k], k);
+      }
+    }
+  };
+  const c = content && typeof content === 'object' ? content : {};
+  visit(c.blocks, 'blocks');
+  visit(c.stickyNotes, 'stickyNotes');
+  return out;
 }
 
 function defaultContent() {
@@ -640,21 +670,46 @@ app.put('/api/content', (req, res) => {
   const content = contentMigration.content;
   const undoSnapshot = undoMigration.content;
 
-  // Sanity check: reject if Japanese text was corrupted (e.g. PowerShell encoding issue)
-  const json = JSON.stringify(content);
+  // 保存の安全装置（2026-10-03 に2度目の見直し。1.2.5）。
+  //
+  // ★1.2.4 までは「日本語の字数が半分未満に減ったら拒否」だった。
+  //   (a) 日本語の文書を英語に書き直す正しい操作まで拒否していた。
+  //   (b) 文書の半分以上を消すと、**その後の保存がすべて拒否され続けた**。
+  //       比べる相手（ディスクの中身）が消す前のまま変わらないので、
+  //       何を書き足しても「半分未満」のまま。画面には「保存失敗」としか出ず、
+  //       利用者は書いたものが残っていないことに気づけない（1.2.4 で再現済み）。
+  //   そこで、拒否するのは文字化けだけにした:
+  //     日本語が半分未満に減り、その分だけ「?」や置換文字（U+FFFD）が増えた
+  //     → 文字コードの事故（PowerShell 経由などで日本語が ? に化けた）の疑い。
+  //   拒否した本文は捨てずに .md で残す。拒否は1回の保存の判定だけで、次の保存は新しく判定する。
+  //   大きく消す保存は通す。その代わり、消す前の本文を .md で1世代残す
+  //   （日ごとの写しは「その日の最初の保存」なので、その日に書いて消した分は残らない。実測済み）。
+  //   数えるのは利用者の書いた本文（blocks と付箋）だけ。id・画像の data: URI・
+  //   設定は数えない（画像1枚で字数が何万も増減して、本文の増減が見えなくなるため）。
   const prevRaw = readJSON(CONTENT_FILE);
   const prev = prevRaw ? normalizeStoredContent(prevRaw) : null;
+  let keptBeforeDelete = null;
   if (prev) {
-    const prevJson = JSON.stringify(prev);
-    const prevJP = (prevJson.match(/[\u3000-\u9fff\uff00-\uffef]/g) || []).length;
-    const newJP = (json.match(/[\u3000-\u9fff\uff00-\uffef]/g) || []).length;
-    // If previous had significant Japanese but new has much less, likely corrupted
-    if (prevJP > 50 && newJP < prevJP * 0.5) {
+    const before = measureContentText(prev);
+    const after = measureContentText(content);
+    const lostJP = before.japanese - after.japanese;
+    const gainedBad = after.replacement - before.replacement;
+    if (before.japanese > 50 && after.japanese < before.japanese * 0.5 && gainedBad >= lostJP * 0.5) {
+      const kept = keepRejectedContent(content);
       return res.status(400).json({
-        error: 'データ破損の疑い: 日本語文字が大幅に減少しています。保存を拒否しました。',
-        prevJapanese: prevJP,
-        newJapanese: newJP
+        error: '日本語の文字が「?」に化けているため、この保存はしませんでした（文字コードの問題）。' +
+          '前に保存した本文はそのままです。' +
+          // 場所（フルパス）は画面が別の行に出す。オンライン版では開けない場所なので文には入れない。
+          (kept ? '化けた本文は捨てずに「' + kept.name + '」に残しました。' : ''),
+        reason: 'garbled',
+        prevJapanese: before.japanese,
+        newJapanese: after.japanese,
+        keptFile: kept ? kept.file : null,
+        keptName: kept ? kept.name : null
       });
+    }
+    if (before.chars > 50 && after.chars < before.chars * 0.5) {
+      keptBeforeDelete = keepBeforeDeleteContent(prev);
     }
   }
 
@@ -691,7 +746,12 @@ app.put('/api/content', (req, res) => {
   // Save today's daily log (本日更新セクション as-is)
   saveDailyLog();
 
-  res.json({ ok: true, saved: new Date().toISOString() });
+  const saved = { ok: true, saved: new Date().toISOString() };
+  if (keptBeforeDelete) {
+    saved.keptFile = keptBeforeDelete.file;
+    saved.keptName = keptBeforeDelete.name;
+  }
+  res.json(saved);
 });
 
 // Undo
@@ -861,52 +921,141 @@ app.post('/api/import-md', (req, res) => {
   }
 });
 
+// 本文（blocks）を Markdown の行にする。書き出しと、保存の守りが残すファイルで同じものを使う。
+function blocksToMd(blocks, depth) {
+  const lines = [];
+  for (const b of blocks) {
+    if (b.type === 'heading') {
+      const prefix = b.level === 2 ? '#####\u3000' : '##### ';
+      // ★タグを外してから、実体参照を素の文字へ戻す。順番が逆だと、
+      //   利用者が書いた「&lt;b&gt;」がタグになって消える。
+      const text = unescapeHtmlEntities(
+        (b.text || '').replace(/<code>/g, '`').replace(/<\/code>/g, '`').replace(/<[^>]+>/g, ''));
+      lines.push(prefix + text);
+      lines.push('');
+    } else if (b.type === 'paragraph') {
+      const indent = '&#x09;'.repeat(b.indent || 0);
+      const text = unescapeHtmlEntities(
+        (b.text || '').replace(/<code>/g, '`').replace(/<\/code>/g, '`')
+          .replace(/<br>/g, '\n' + indent).replace(/<[^>]+>/g, ''));
+      lines.push(indent + text);
+      lines.push('');
+    } else if (b.type === 'code') {
+      lines.push('```' + (b.language || ''));
+      lines.push(b.content || '');
+      lines.push('```');
+      lines.push('');
+    } else if (b.type === 'table') {
+      if (b.headers && b.headers.length) {
+        lines.push('| ' + b.headers.map(h => unescapeHtmlEntities(h)).join(' | ') + ' |');
+        lines.push('| ' + b.headers.map(() => '---').join(' | ') + ' |');
+        (b.rows || []).forEach(row => {
+          lines.push('| ' + row.map(c => unescapeHtmlEntities((c || '').replace(/<[^>]+>/g, ''))).join(' | ') + ' |');
+        });
+        lines.push('');
+      }
+    } else if (b.type === 'section') {
+      lines.push('[[ ' + unescapeHtmlEntities(b.title || '') + ' ]]');
+      lines.push(...blocksToMd(b.children || [], depth + 1));
+      lines.push('[[/]]');
+      lines.push('');
+    }
+  }
+  return lines;
+}
+
+// ── 保存の守りが残すファイル ─────────────────────────────
+// 置き場は作業ファイルの中身（content.json）と同じフォルダ。名前は作業ファイルの名前から作る。
+//   <名前>.rejected-<日時>.md  … 文字化けで保存しなかった本文（拒否のたびに1つ）
+//   <名前>.before-delete.md    … 大きく消す直前の本文（1世代。次に大きく消したら上書き）
+// 中身は書き出し（Markdown）と同じ形。付箋は末尾に足す（書き出しには無いが、消えると戻せないため）。
+const KEPT_FILE_RE = /\.(rejected-\d{8}-\d{6}(-\d+)?|before-delete)\.md$/;
+
+function keptFileStem() {
+  let name = DEFAULT_DOCUMENT_TITLE;
+  try {
+    const p = projectStore.load().projects.find(x => x.id === currentProjectId);
+    if (p && p.name) name = String(p.name);
+  } catch (_) { /* 名簿が読めなくても既定の名前で残す */ }
+  const safe = Array.from(name)
+    .filter(ch => ch.charCodeAt(0) >= 32 && !'\\/:*?"<>|'.includes(ch))
+    .join('').replace(/[. ]+$/, '').slice(0, 60);
+  return safe || 'document';
+}
+
+function contentToKeptMarkdown(content) {
+  const lines = blocksToMd(Array.isArray(content.blocks) ? content.blocks : [], 0);
+  const notes = (Array.isArray(content.stickyNotes) ? content.stickyNotes : [])
+    .filter(n => n && typeof n.text === 'string' && n.text.trim());
+  if (notes.length) {
+    lines.push('##### 付箋', '');
+    for (const n of notes) lines.push('- ' + n.text.replace(/\n/g, ' '), '');
+  }
+  return lines.join('\n');
+}
+
+function keptStamp() {
+  const d = new Date();
+  const p2 = n => String(n).padStart(2, '0');
+  return today() + '-' + p2(d.getHours()) + p2(d.getMinutes()) + p2(d.getSeconds());
+}
+
+function writeKeptFile(name, content) {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  const file = path.join(DATA_DIR, name);
+  fs.writeFileSync(file, contentToKeptMarkdown(content), 'utf-8');
+  return { file, name };
+}
+
+// 自動保存は同じ中身を何度も送ってくる。同じ化けた本文でファイルを増やさない。
+let lastRejected = null;
+function keepRejectedContent(content) {
+  try {
+    const sig = JSON.stringify([content.blocks, content.stickyNotes]);
+    if (lastRejected && lastRejected.project === currentProjectId && lastRejected.sig === sig &&
+        fs.existsSync(lastRejected.kept.file)) {
+      return lastRejected.kept;
+    }
+    const stem = keptFileStem() + '.rejected-' + keptStamp();
+    let name = stem + '.md';
+    for (let i = 2; fs.existsSync(path.join(DATA_DIR, name)); i++) name = stem + '-' + i + '.md';
+    const kept = writeKeptFile(name, content);
+    lastRejected = { project: currentProjectId, sig, kept };
+    return kept;
+  } catch (e) {
+    console.error('[save-guard] 拒否した本文を残せませんでした:', e.message);
+    return null;
+  }
+}
+
+function keepBeforeDeleteContent(prev) {
+  try {
+    return writeKeptFile(keptFileStem() + '.before-delete.md', prev);
+  } catch (e) {
+    console.error('[save-guard] 消す前の本文を残せませんでした:', e.message);
+    return null;
+  }
+}
+
+// 画面の「この本文を受け取る」から呼ぶ。オンライン版ではファイルの場所を開けないので、
+// 同じ中身を落とせるようにする。名前は上の2つの形だけ受け付ける（置き場の外は読まない）。
+app.get('/api/kept-file', (req, res) => {
+  const name = String((req.query && req.query.name) || '');
+  if (!KEPT_FILE_RE.test(name) || name !== path.basename(name) || name.includes('..')) {
+    return res.status(400).json({ error: 'このファイルは渡せません' });
+  }
+  const file = path.join(DATA_DIR, name);
+  if (!fs.existsSync(file)) return res.status(404).json({ error: 'ファイルがありません' });
+  res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+  res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(name));
+  res.send(fs.readFileSync(file, 'utf-8'));
+});
+
 app.get('/api/export-md', (req, res) => {
   ensureDirs();
   const content = readJSON(CONTENT_FILE);
   if (!content) return res.status(404).json({ error: 'No content' });
 
-  function blocksToMd(blocks, depth) {
-    const lines = [];
-    for (const b of blocks) {
-      if (b.type === 'heading') {
-        const prefix = b.level === 2 ? '#####\u3000' : '##### ';
-        // ★タグを外してから、実体参照を素の文字へ戻す。順番が逆だと、
-        //   利用者が書いた「&lt;b&gt;」がタグになって消える。
-        const text = unescapeHtmlEntities(
-          (b.text || '').replace(/<code>/g, '`').replace(/<\/code>/g, '`').replace(/<[^>]+>/g, ''));
-        lines.push(prefix + text);
-        lines.push('');
-      } else if (b.type === 'paragraph') {
-        const indent = '&#x09;'.repeat(b.indent || 0);
-        const text = unescapeHtmlEntities(
-          (b.text || '').replace(/<code>/g, '`').replace(/<\/code>/g, '`')
-            .replace(/<br>/g, '\n' + indent).replace(/<[^>]+>/g, ''));
-        lines.push(indent + text);
-        lines.push('');
-      } else if (b.type === 'code') {
-        lines.push('```' + (b.language || ''));
-        lines.push(b.content || '');
-        lines.push('```');
-        lines.push('');
-      } else if (b.type === 'table') {
-        if (b.headers && b.headers.length) {
-          lines.push('| ' + b.headers.map(h => unescapeHtmlEntities(h)).join(' | ') + ' |');
-          lines.push('| ' + b.headers.map(() => '---').join(' | ') + ' |');
-          (b.rows || []).forEach(row => {
-            lines.push('| ' + row.map(c => unescapeHtmlEntities((c || '').replace(/<[^>]+>/g, ''))).join(' | ') + ' |');
-          });
-          lines.push('');
-        }
-      } else if (b.type === 'section') {
-        lines.push('[[ ' + unescapeHtmlEntities(b.title || '') + ' ]]');
-        lines.push(...blocksToMd(b.children || [], depth + 1));
-        lines.push('[[/]]');
-        lines.push('');
-      }
-    }
-    return lines;
-  }
 
   const md = blocksToMd(content.blocks, 0).join('\n');
   res.setHeader('Content-Type', 'text/markdown; charset=utf-8');

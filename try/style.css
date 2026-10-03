@@ -1414,6 +1414,18 @@ body.view-mode .ime-debug-panel {
   padding: 22px 28px 28px;
 }
 
+/* ★窓の中身が左右の縁に貼り付いていた（2026-10-02 利用者の指摘・オンライン版の「使い方」）。
+   設定の窓は中身を .settings-form で包んでいるので余白があるが、
+   使い方・取り込み・作業ファイルの整理・履歴の書き出しの4つは
+   中身を .settings-panel の直下に置いていて、余白がどこにも無かった。
+   包みを足すと app.js の参照を崩しかねないので、直下の要素に同じ余白を付ける。 */
+.settings-panel > .settings-hero ~ :not(.settings-form) {
+  margin-left: 28px;
+  margin-right: 28px;
+}
+.settings-panel > .settings-hero + :not(.settings-form) { margin-top: 22px; }
+.settings-panel > .settings-hero ~ :not(.settings-form):last-child { margin-bottom: 28px; }
+
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1902,6 +1914,10 @@ nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   .settings-form {
     padding-left: 18px;
     padding-right: 18px;
+  }
+  .settings-panel > .settings-hero ~ :not(.settings-form) {
+    margin-left: 18px;
+    margin-right: 18px;
   }
 
   .settings-actions {
@@ -3184,6 +3200,8 @@ body.view-mode .dropdown-item.edit-only-item { display: none; }
      窓が縦に詰まる。スマホでは上下も詰める（中身が多いので画面を使い切る）。 */
   .settings-hero { padding: 20px 18px 14px; }
   .settings-form { padding: 16px 18px 22px; }
+  .settings-panel > .settings-hero + :not(.settings-form) { margin-top: 16px; }
+  .settings-panel > .settings-hero ~ :not(.settings-form):last-child { margin-bottom: 22px; }
 
   /* 作業ファイルの整理: 名前・印・ボタンを横1列に詰めると、
      ボタンの字が「名前を変え／る」と折り返し、印も切れる。縦に積む。 */

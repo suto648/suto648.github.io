@@ -83,6 +83,8 @@
   let knownContentVersion = null;     // 自分が把握している共有データの版
   let lastLocalSaveAt = 0;            // 直近で自分が保存した時刻（自己更新の誤検知回避）
   let externalChangeBannerEl = null;  // 「他のPCで更新あり」バー
+  let saveGuardNoticeEl = null;       // 保存の守りのお知らせ（拒否の理由・残したファイル）
+  let lastRejectedContentJson = null; // 文字化けで拒否された中身（自動保存で同じ物を送り直さない）
   let isLightMode = localStorage.getItem('theme') === 'light';
   let pendingHistoryShortcut = null;
   let reorgModeActive = false;
@@ -2086,6 +2088,11 @@ var findBlock = ${findBlock.toString()};
     if (saveInFlight) {
       return { ok: false, skipped: true, reason: 'save-in-flight' };
     }
+    // 同じ中身はもう判定済み（拒否して .md に残した）。自動保存では送り直さない。
+    // 1文字でも変われば新しく判定する（拒否が後の保存を止め続けないように）。
+    if (opts.reason === 'autosave' && currentJson === lastRejectedContentJson) {
+      return { ok: false, skipped: true, reason: 'already-rejected' };
+    }
 
     saveInFlight = true;
     setSaveStatus(opts.reason === 'autosave' ? '自動保存中...' : '保存中...', 'pending');
@@ -2113,8 +2120,20 @@ var findBlock = ${findBlock.toString()};
         lastLocalSaveAt = Date.now();
         refreshSyncBaseline();
         dismissExternalChangeBanner();
+        lastRejectedContentJson = null;
+        // 大きく消した保存は通す。消す前の本文を残した場所を知らせる。
+        if (data.keptFile) {
+          showSaveGuardNotice('info',
+            '大きく消したので、消す前の本文を残しました（1つだけ。次に大きく消すと入れ替わります）。',
+            data.keptFile, data.keptName);
+        }
       } else {
-        setSaveStatus('保存失敗', 'error');
+        // ★1.2.4 までは理由を出さず「保存失敗」だけだった。何が起きたか分からず、
+        //   書き足すほど失われていた。理由と、拒否した本文を残した場所を出す。
+        if (data.reason === 'garbled') lastRejectedContentJson = currentJson;
+        setSaveStatus(data.reason === 'garbled' ? '保存しなかった（文字化け）' : '保存失敗', 'error');
+        showSaveGuardNotice('error', data.error || ('保存できませんでした（' + res.status + '）'),
+          data.keptFile, data.keptName);
       }
       result = data;
     } catch (_) {
@@ -2474,6 +2493,46 @@ var findBlock = ${findBlock.toString()};
     blockEls.forEach(el => syncBlockFromDOM(el, index));
   }
 
+  // ★オンライン版（ブラウザで試す版）だけ: 打ち終わって少し経ったら保存する。
+  //   定時の自動保存は2分おきなので、試しに書いた人には2分近く「本日更新」に
+  //   何も出ず、その前に読み込み直すと書いたものが消えていた（2026-10-02 実測・
+  //   利用者の指摘「オンライン版の本日更新が機能していない」）。
+  //   使い方の窓も「打ち終わって少し経つと自動で保存されます」と書いている。
+  //   デスクトップ版の保存の間隔（設定で変えられる）は変えない。
+  const ONLINE_IDLE_SAVE_MS = 2000;
+  function startOnlineIdleSave() {
+    if (!window.__YARUBEKI_ONLINE__) return;
+    let timerId = null;
+    let composing = 0;
+    const schedule = () => {
+      if (timerId) clearTimeout(timerId);
+      timerId = setTimeout(run, ONLINE_IDLE_SAVE_MS);
+    };
+    async function run() {
+      timerId = null;
+      if (isViewMode) return;
+      // 変換の途中や別の保存の最中には書かない（終わってから改めて待つ）
+      if (composing > 0 || saveInFlight) { schedule(); return; }
+      syncAllFromDOM();
+      if (!hasUnsavedChanges()) return;
+      await saveContent({ reason: 'autosave', skipToast: true });
+    }
+    blocksContainer.addEventListener('compositionstart', () => { composing++; });
+    blocksContainer.addEventListener('compositionend', () => {
+      composing = Math.max(0, composing - 1);
+      schedule();
+    });
+    blocksContainer.addEventListener('input', schedule);
+    blocksContainer.addEventListener('change', schedule);
+    // タブを閉じる・切り替える前に、待っている分を書いておく
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'hidden' || !timerId) return;
+      clearTimeout(timerId);
+      composing = 0;
+      run();
+    });
+  }
+
   function startAutosave() {
     if (autosaveTimerId) clearInterval(autosaveTimerId);
     autosaveTimerId = setInterval(async () => {
@@ -2583,6 +2642,60 @@ var findBlock = ${findBlock.toString()};
 
   function dismissExternalChangeBanner() {
     if (externalChangeBannerEl) { externalChangeBannerEl.remove(); externalChangeBannerEl = null; }
+  }
+
+  // 保存の守りのお知らせ。閉じるまで出しておく（トーストは2秒で消えて読めないため）。
+  //   kind: 'error' = この保存はしなかった / 'info' = 保存した。念のため前の本文を残した
+  //   オンライン版はファイルの場所を開けないので、場所の代わりに受け取るボタンだけ出す。
+  function showSaveGuardNotice(kind, message, keptFile, keptName) {
+    dismissSaveGuardNotice();
+    const bar = document.createElement('div');
+    bar.id = 'saveGuardNotice';
+    bar.dataset.kind = kind;
+    bar.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    bar.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99999;'
+      + 'max-width:min(720px,calc(100vw - 32px));box-sizing:border-box;'
+      + 'background:' + (kind === 'error' ? '#b91c1c' : '#1e40af') + ';color:#fff;padding:10px 14px;border-radius:10px;'
+      + 'box-shadow:0 4px 16px rgba(0,0,0,.35);font-size:14px;line-height:1.5;';
+    const msg = document.createElement('div');
+    msg.className = 'save-guard-message';
+    msg.textContent = message;
+    bar.appendChild(msg);
+    if (keptFile && !window.__YARUBEKI_ONLINE__) {
+      const where = document.createElement('div');
+      where.className = 'save-guard-path';
+      where.style.cssText = 'margin-top:4px;font-family:monospace;font-size:12px;word-break:break-all;user-select:all;';
+      where.textContent = keptFile;
+      bar.appendChild(where);
+    }
+    const row = document.createElement('div');
+    row.style.cssText = 'margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;';
+    const btnCss = 'cursor:pointer;border:0;border-radius:6px;padding:5px 10px;background:#fff;color:#111;font-weight:bold;';
+    if (keptName) {
+      const get = document.createElement('button');
+      get.type = 'button';
+      get.className = 'save-guard-download';
+      get.textContent = 'この本文を .md で受け取る';
+      get.style.cssText = btnCss;
+      get.addEventListener('click', () => {
+        downloadFromApi('/api/kept-file?name=' + encodeURIComponent(keptName), keptName);
+      });
+      row.appendChild(get);
+    }
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'save-guard-close';
+    close.textContent = '閉じる';
+    close.style.cssText = btnCss;
+    close.addEventListener('click', dismissSaveGuardNotice);
+    row.appendChild(close);
+    bar.appendChild(row);
+    document.body.appendChild(bar);
+    saveGuardNoticeEl = bar;
+  }
+
+  function dismissSaveGuardNotice() {
+    if (saveGuardNoticeEl) { saveGuardNoticeEl.remove(); saveGuardNoticeEl = null; }
   }
 
   // ============================================================
@@ -3994,12 +4107,26 @@ var findBlock = ${findBlock.toString()};
 
   // 末尾の空行（末尾<br> + ゼロ幅フィラー span）の上にキャレットがあるか。
   // フィラーのゼロ幅文字のせいで、この空行を消すのにBackspaceが2回必要になっていた。
+  // フィラーの直前の <br> を返す（無ければ null）。
+  // ★<br> とフィラーの間に、空の文字ノード（"" やゼロ幅文字だけ）が挟まることがある
+  //   （Enter のあとの DOM で実測。innerHTML には現れないので目では見えない）。
+  //   previousSibling だけを見ていたため「末尾の空行」と判定できず、
+  //   空の最後の行をクリックしてからの Backspace が1回で効かなかった（_qa/test-keyboard.js）。
+  function getBrBeforeFiller(filler) {
+    let node = filler ? filler.previousSibling : null;
+    while (node && node.nodeType === Node.TEXT_NODE &&
+      node.data.split(EDITABLE_FILLER_CHAR).join('') === '') {
+      node = node.previousSibling;
+    }
+    return node && node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR' ? node : null;
+  }
+
   function isCaretAtTrailingFillerLine(editableEl) {
     const sel = window.getSelection();
     if (!sel || !sel.rangeCount || !sel.isCollapsed) return false;
     const filler = getTrailingEditableFiller(editableEl);
     if (!filler) return false;
-    const br = filler.previousSibling;
+    const br = getBrBeforeFiller(filler);
     if (!br || br.nodeType !== Node.ELEMENT_NODE || br.tagName !== 'BR') return false;
     const range = sel.getRangeAt(0);
     if (!isNodeInsideEditable(range.startContainer, editableEl)) return false;
@@ -4013,8 +4140,8 @@ var findBlock = ${findBlock.toString()};
   function removeTrailingFillerLine(editableEl) {
     const filler = getTrailingEditableFiller(editableEl);
     if (!filler) return false;
-    const br = filler.previousSibling;
-    if (!br || br.nodeType !== Node.ELEMENT_NODE || br.tagName !== 'BR') return false;
+    const br = getBrBeforeFiller(filler);
+    if (!br) return false;
     br.remove();
     const newFiller = syncEditableTrailingFiller(editableEl);
     const sel = window.getSelection();
@@ -6802,6 +6929,7 @@ var findBlock = ${findBlock.toString()};
     initSearch();
     loadReorgModeState();
     startAutosave();
+    startOnlineIdleSave();   // オンライン版だけ: 打ち終わって少し経ったら保存
     refreshSyncBaseline();   // 現在の共有データの版を基準に設定
     startSyncWatch();        // 別PCの更新を監視して自動反映する
     registerLiveTodayImageResolver(); // 本日更新の画像マーカーを実画像に解決
